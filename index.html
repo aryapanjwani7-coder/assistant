@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Your Unified AI Assistant (MVP)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind via CDN (no build step) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Day.js for dates -->
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
+  <script>dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);</script>
+  <!-- Chrono for natural-language time parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/chrono-node/dist/chrono.min.js"></script>
+  <!-- ICS file generator -->
+  <script src="https://cdn.jsdelivr.net/npm/ics/dist/ics.min.js"></script>
+  <style>
+    html, body { height: 100%; }
+    .card { @apply bg-white rounded-2xl shadow p-4; }
+    .btn { @apply rounded-xl px-4 py-2 font-medium shadow; }
+    .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+    .btn-secondary { @apply bg-gray-100 hover:bg-gray-200; }
+    .pill { @apply text-xs px-2 py-0.5 rounded-full bg-gray-100; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900">
+  <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+    <header class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <h1 class="text-2xl md:text-3xl font-bold">Unified AI Assistant (MVP)</h1>
+      <div class="flex items-center gap-2">
+        <input id="apiKey" type="password" placeholder="OpenAI API Key (sk-...)" class="w-72 card !py-2" />
+        <button id="saveKey" class="btn btn-primary">Save</button>
+        <button id="clearKey" class="btn btn-secondary">Clear</button>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="flex gap-2">
+      <button data-tab="chat" class="tab btn btn-secondary">Chat</button>
+      <button data-tab="plan" class="tab btn btn-secondary">Plan My Day</button>
+      <button data-tab="flows" class="tab btn btn-secondary">Task Flows</button>
+    </nav>
+
+    <!-- Chat -->
+    <section id="chat" class="card space-y-3 hidden">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">General Knowledge & Conversation</h2>
+        <span class="pill">Model: gpt-4o-mini (configurable)</span>
+      </div>
+      <div id="chatLog" class="bg-gray-50 rounded-xl p-3 h-72 overflow-auto text-sm space-y-3"></div>
+      <div class="flex gap-2">
+        <textarea id="chatInput" class="flex-1 card" rows="2" placeholder="Ask anything..."></textarea>
+        <button id="sendChat" class="btn btn-primary">Send</button>
+      </div>
+    </section>
+
+    <!-- Plan -->
+    <section id="plan" class="card space-y-4 hidden">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Smart Scheduling & Daily Planning</h2>
+        <div class="flex gap-2">
+          <button id="notifyPerm" class="btn btn-secondary">Enable Notifications</button>
+          <button id="exportICS" class="btn btn-secondary">Export .ics</button>
+        </div>
+      </div>
+      <p class="text-sm text-gray-600">
+        Describe your day in plain English (example: “I live in Dykstra. Tomorrow I have physics 9–11am in Boelter, then CS 2–3pm. I need breakfast, lunch, dinner, laundry (1h15m). Sleep by 11pm. Plan my day.”)
+      </p>
+      <textarea id="planInput" class="w-full card" rows="4" placeholder="Type your day here..."></textarea>
+      <div class="flex gap-2">
+        <button id="makePlan" class="btn btn-primary">Make / Update Plan</button>
+        <button id="resetPlan" class="btn btn-secondary">Reset</button>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <h3 class="font-semibold">Structured Plan (editable)</h3>
+          <div id="planTable" class="bg-gray-50 rounded-xl p-3 text-sm"></div>
+        </div>
+        <div class="space-y-2">
+          <h3 class="font-semibold">Visual Timeline (today)</h3>
+          <div class="bg-white rounded-xl border p-3">
+            <div id="timeline" class="relative h-96 overflow-hidden">
+              <!-- timeline grid & blocks injected here -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500">
+        Tip: After the first plan, you can just add updates like “class cancelled 2–3pm” or “add gym 45m” and click “Make / Update Plan”.
+      </p>
+    </section>
+
+    <!-- Flows -->
+    <section id="flows" class="card space-y-4 hidden">
+      <h2 class="text-xl font-semibold">Task-Flow Assistant</h2>
+      <p class="text-sm text-gray-600">
+        Example: “Book a round trip to India from LAX, Dec 15–Jan 5. Budget \$1500. Prefer non-stop if possible.”  
+        The assistant breaks it into steps (flights → hotels → sightseeing), and you can tick them off.
+      </p>
+      <textarea id="flowInput" class="w-full card" rows="3" placeholder="Describe your goal..."></textarea>
+      <div class="flex gap-2">
+        <button id="makeFlow" class="btn btn-primary">Create / Update Flow</button>
+        <button id="resetFlow" class="btn btn-secondary">Reset Flow</button>
+      </div>
+      <div id="flowSteps" class="space-y-2"></div>
+    </section>
+
+    <footer class="text-xs text-gray-500 text-center py-4">
+      MVP for personal use. No backend. Data saved in your browser. Export calendars to .ics for phone/Google/Apple Calendar.
+    </footer>
+  </div>
+
+  <script>
+    /**********************
+     * Simple state/store *
+     **********************/
+    const $ = (s)=>document.querySelector(s);
+    const $$ = (s)=>document.querySelectorAll(s);
+
+    const store = {
+      get key(){ return localStorage.getItem('OPENAI_KEY') || ''; },
+      set key(v){ localStorage.setItem('OPENAI_KEY', v); },
+
+      get chatHistory(){ return JSON.parse(localStorage.getItem('CHAT_HISTORY') || '[]'); },
+      set chatHistory(v){ localStorage.setItem('CHAT_HISTORY', JSON.stringify(v)); },
+
+      get plan(){ return JSON.parse(localStorage.getItem('PLAN_V1') || 'null'); },
+      set plan(v){ localStorage.setItem('PLAN_V1', JSON.stringify(v)); },
+
+      get flow(){ return JSON.parse(localStorage.getItem('FLOW_V1') || 'null'); },
+      set flow(v){ localStorage.setItem('FLOW_V1', JSON.stringify(v)); },
+    };
+
+    // Tabs
+    const tabs = $$('.tab');
+    const sections = ['chat','plan','flows'];
+    tabs.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        sections.forEach(id=>$('#'+id).classList.add('hidden'));
+        $('#'+btn.dataset.tab).classList.remove('hidden');
+        tabs.forEach(b=>b.classList.remove('bg-blue-600','text-white'));
+        btn.classList.add('bg-blue-600','text-white');
+      });
+    });
+    // Default to chat
+    document.querySelector('[data-tab="chat"]').click();
+
+    // API key controls
+    $('#apiKey').value = store.key;
+    $('#saveKey').onclick = ()=>{ store.key = $('#apiKey').value.trim(); alert('Saved!'); };
+    $('#clearKey').onclick = ()=>{ localStorage.removeItem('OPENAI_KEY'); $('#apiKey').value=''; alert('Cleared!'); };
+
+    // Notifications
+    $('#notifyPerm').onclick = async ()=>{
+      const s = await Notification.requestPermission();
+      alert('Notification permission: ' + s);
+    };
+
+    /*****************
+     * OpenAI helper *
+     *****************/
+    const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+    async function askOpenAI(messages, {model='gpt-4o-mini', temperature=0.2} = {}){
+      const key = store.key;
+      if(!key){ throw new Error('Missing OpenAI API key. Add it at the top.'); }
+      const res = await fetch(OPENAI_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + key
+        },
+        body: JSON.stringify({
+          model,
+          temperature,
+          messages
+        })
+      });
+      if(!res.ok){
+        const t = await res.text();
+        throw new Error('OpenAI error: ' + t);
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content?.trim() || '';
+    }
+
+    /********
+     * Chat *
+     ********/
+    function renderChat(){
+      const log = $('#chatLog');
+      log.innerHTML = '';
+      for(const m of store.chatHistory){
+        const bubble = document.createElement('div');
+        bubble.className = 'p-2 rounded-lg ' + (m.role==='user' ? 'bg-blue-50' : 'bg-white border');
+        bubble.innerHTML = '<div class="text-xs text-gray-500">'+(m.role==='user'?'You':'Assistant')+'</div><div class="whitespace-pre-wrap">'+m.content+'</div>';
+        log.appendChild(bubble);
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+    renderChat();
+
+    $('#sendChat').onclick = async ()=>{
+      const input = $('#chatInput');
+      const text = input.value.trim();
+      if(!text) return;
+      const hist = store.chatHistory;
+      hist.push({role:'user', content:text});
+      store.chatHistory = hist;
+      renderChat();
+      input.value = '';
+      try{
+        const answer = await askOpenAI([
+          {role:'system', content:'You are a helpful, concise assistant.'},
+          ...store.chatHistory
+        ]);
+        hist.push({role:'assistant', content:answer});
+        store.chatHistory = hist;
+        renderChat();
+      }catch(e){
+        alert(e.message);
+      }
+    };
+
+    /***********************
+     * Planner / Scheduler *
+     ***********************/
+    function emptyPlan(dayIso){
+      return {
+        day: dayIso, // e.g., 2025-09-26
+        items: [] // {id, title, start, end, type: 'fixed'|'flexible'|'meal'|'rest', notes}
+      };
+    }
+
+    // Parse free text to draft plan using LLM (strict JSON)
+    async function llmPlanDraft(text, baseDayIso){
+      const sys = `You convert a free-text daily plan into STRICT JSON with an array "items".
+Rules:
+- DO NOT include explanations; return ONLY JSON.
+- For each detected commitment or task, output an object:
+  { "title": string, "type": "fixed"|"flexible"|"meal"|"rest", "duration_min": number (for flexible/meal/rest), "start": "HH:mm" or "", "end": "HH:mm" or "", "notes": string }
+- "fixed" must include start & end.
+- If user mentions sleep target, add type "rest" with duration_min or start/end if explicit.
+- Meals: breakfast/lunch/dinner as type "meal" with duration_min if not given (default 30 for breakfast, 45 for lunch, 45 for dinner).
+- Laundry or chores become type "flexible" with duration_min specified or inferred (e.g., "1h15m" -> 75).
+- If places/locations are mentioned, add a short "notes".
+Assume the date is ${baseDayIso}.`;
+      const user = `Text: """${text}"""`;
+      const out = await askOpenAI([
+        {role:'system', content: sys},
+        {role:'user', content: user}
+      ], {temperature:0.1});
+      // Safe parse
+      try { return JSON.parse(out); } catch(e){ throw new Error('Planner JSON parse error. Output was:\n' + out); }
+    }
+
+    // Allocate flexible blocks around fixed ones within waking window
+    function allocatePlan(baseDayIso, draft){
+      // 1) collect fixed and flex
+      const startOfDay = dayjs(baseDayIso + 'T06:30'); // default wake 6:30
+      const endOfDay   = dayjs(baseDayIso + 'T23:00'); // default sleep 23:00
+      const fixed = [];
+      const flex  = [];
+
+      // helper to HH:mm -> dayjs
+      const toTime = (hhmm)=>dayjs(baseDayIso + 'T' + hhmm.padStart(5,'0'));
+      for(const it of draft.items || []){
+        if(it.type==='fixed' && it.start && it.end){
+          fixed.push({
+            ...it,
+            startDT: toTime(it.start),
+            endDT: toTime(it.end)
+          });
+        }else{
+          // normalize default meal durations
+          let d = it.duration_min || 0;
+          if(it.type==='meal' && !d){
+            const t = (it.title||'').toLowerCase();
+            if(t.includes('breakfast')) d = 30;
+            else if(t.includes('lunch')) d = 45;
+            else if(t.includes('dinner')) d = 45;
+            else d = 30;
+          }
+          if(it.type==='rest' && !d && it.start && it.end){
+            // rest already has bounds—treat as fixed
+            fixed.push({
+              ...it,
+              startDT: toTime(it.start),
+              endDT: toTime(it.end),
+              type:'rest'
+            });
+            continue;
+          }
+          flex.push({...it, duration_min: d || 30});
+        }
+      }
+
+      // 2) sort fixed by start
+      fixed.sort((a,b)=>a.startDT - b.startDT);
+
+      // 3) available gaps between fixed items
+      const gaps = [];
+      let cursor = startOfDay;
+      for(const f of fixed){
+        if(f.startDT.isAfter(cursor)){
+          gaps.push({start: cursor, end: f.startDT});
+        }
+        cursor = f.endDT.isAfter(cursor) ? f.endDT : cursor;
+      }
+      if(cursor.isBefore(endOfDay)) gaps.push({start: cursor, end: endOfDay});
+
+      // 4) place flex items greedily into gaps
+      const placed = [...fixed];
+      function placeOne(task){
+        for(const g of gaps){
+          const freeMin = g.end.diff(g.start,'minute');
+          if(freeMin >= task.duration_min){
+            task.startDT = g.start;
+            task.endDT   = g.start.add(task.duration_min,'minute');
+            // move gap start
+            g.start = task.endDT;
+            placed.push(task);
+            return true;
+          }
+        }
+        return false;
+      }
+      for(const t of flex){ placeOne(t); }
+
+      // 5) Normalize output list, assign ids
+      let id=1;
+      const items = placed.map(it=>{
+        const start = it.startDT ? it.startDT.format('HH:mm') : (it.start||'');
+        const end   = it.endDT ? it.endDT.format('HH:mm')   : (it.end||'');
+        return {
+          id: id++,
+          title: it.title || 'Task',
+          type: it.type || (start && end ? 'fixed' : 'flexible'),
+          start, end,
+          duration_min: it.duration_min || (start && end ? dayjs(baseDayIso+'T'+end).diff(dayjs(baseDayIso+'T'+start),'minute') : 0),
+          notes: it.notes || ''
+        };
+      }).sort((a,b)=>a.start.localeCompare(b.start));
+      return { day: baseDayIso, items };
+    }
+
+    // Render plan table + timeline
+    function renderPlan(plan){
+      const wrap = $('#planTable');
+      if(!plan){ wrap.innerHTML = '<div class="text-gray-500">No plan yet.</div>'; renderTimeline(null); return; }
+      const rows = plan.items.map(it=>{
+        return `<div class="grid grid-cols-12 items-center gap-2 py-1 border-b">
+          <input class="col-span-4 card !py-1" data-edit="title" data-id="${it.id}" value="${escapeHtml(it.title)}" />
+          <select class="col-span-2 card !py-1" data-edit="type" data-id="${it.id}">
+            ${['fixed','flexible','meal','rest'].map(t=>`<option ${it.type===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+          <input class="col-span-2 card !py-1" data-edit="start" data-id="${it.id}" value="${it.start}" placeholder="HH:mm"/>
+          <input class="col-span-2 card !py-1" data-edit="end" data-id="${it.id}" value="${it.end}" placeholder="HH:mm"/>
+          <input class="col-span-2 card !py-1" data-edit="notes" data-id="${it.id}" value="${escapeHtml(it.notes||'')}" placeholder="notes"/>
+        </div>`;
+      }).join('');
+      wrap.innerHTML = `
+        <div class="grid grid-cols-12 gap-2 text-xs text-gray-500 pb-1">
+          <div class="col-span-4">Title</div>
+          <div class="col-span-2">Type</div>
+          <div class="col-span-2">Start</div>
+          <div class="col-span-2">End</div>
+          <div class="col-span-2">Notes</div>
+        </div>
+        ${rows || '<div class="text-gray-500">No items.</div>'}
+        <div class="pt-2">
+          <button id="addRow" class="btn btn-secondary">Add Item</button>
+        </div>
+      `;
+
+      // edit handlers
+      wrap.querySelectorAll('[data-edit]').forEach(inp=>{
+        inp.addEventListener('change', ()=>{
+          const id = Number(inp.dataset.id);
+          const key= inp.dataset.edit;
+          const val= inp.value;
+          const p = store.plan;
+          const it = p.items.find(x=>x.id===id);
+          if(!it) return;
+          it[key] = val;
+          store.plan = p;
+          renderPlan(p);
+        });
+      });
+      $('#addRow').onclick = ()=>{
+        const p = store.plan || emptyPlan(dayjs().format('YYYY-MM-DD'));
+        p.items.push({id: (p.items.at(-1)?.id||0)+1, title:'New Task', type:'flexible', start:'', end:'', duration_min:30, notes:''});
+        store.plan = p;
+        renderPlan(p);
+      };
+
+      renderTimeline(plan);
+    }
+
+    function renderTimeline(plan){
+      const tl = $('#timeline');
+      tl.innerHTML = '';
+      const startHr = 6, endHr = 24; // 6:00 to 24:00
+      // grid hours
+      for(let h=startHr; h<=endHr; h++){
+        const line = document.createElement('div');
+        line.className='absolute left-0 right-0 border-t border-gray-200';
+        const y = ((h-startHr)/(endHr-startHr))*100;
+        line.style.top = y + '%';
+        tl.appendChild(line);
+
+        const lbl = document.createElement('div');
+        lbl.className='absolute left-0 -translate-y-1/2 text-xs text-gray-500';
+        lbl.style.top = y + '%';
+        lbl.textContent = (h<10?'0':'')+h+':00';
+        tl.appendChild(lbl);
+      }
+      if(!plan) return;
+      // blocks
+      const day = plan.day;
+      for(const it of plan.items){
+        if(!it.start || !it.end) continue;
+        const s = dayjs(day+'T'+it.start), e = dayjs(day+'T'+it.end);
+        const totalMin = (endHr-startHr)*60;
+        const startMin = (s.hour()-startHr)*60 + s.minute();
+        const durMin   = e.diff(s,'minute');
+        const topPct   = (startMin/totalMin)*100;
+        const heightPct= (durMin/totalMin)*100;
+
+        const block = document.createElement('div');
+        block.className = 'absolute right-3 left-16 rounded-lg text-xs p-2 text-white shadow';
+        block.style.top = topPct + '%';
+        block.style.height = heightPct + '%';
+        block.style.background = colorForType(it.type);
+        block.innerHTML = `<div class="font-semibold">${escapeHtml(it.title)}</div><div>${it.start}–${it.end}</div>`;
+        tl.appendChild(block);
+      }
+    }
+    function colorForType(t){
+      if(t==='fixed') return '#3b82f6';
+      if(t==='meal') return '#10b981';
+      if(t==='rest') return '#8b5cf6';
+      return '#f59e0b'; // flexible
+    }
+
+    // Make / Update plan
+    $('#makePlan').onclick = async ()=>{
+      const text = $('#planInput').value.trim();
+      const baseDay = detectBaseDay(text) || dayjs().format('YYYY-MM-DD');
+      try{
+        // 1) use chrono to pre-anchor relative words (“tomorrow”)
+        // (We still ask LLM to structure to JSON)
+        const draft = await llmPlanDraft(text, baseDay);
+        // Ensure shape
+        const norm = { items: Array.isArray(draft.items) ? draft.items : (Array.isArray(draft) ? draft : []) };
+
+        // 2) allocation
+        const allocated = allocatePlan(baseDay, norm);
+
+        // 3) merge with prior plan if this is an update
+        const prior = store.plan;
+        let merged = allocated;
+        if(prior && prior.day===allocated.day){
+          // simple “reflow”: take any existing edits with fixed times and keep, then re-add others
+          const locked = prior.items.filter(it=>it.start && it.end);
+          const keepTitles = new Set(locked.map(it=>it.title+'|'+it.start+'|'+it.end));
+          const reflowDraft = {
+            items: [
+              ...locked.map(it=>({title:it.title, type:it.type, start:it.start, end:it.end, notes:it.notes})),
+              ...allocated.items.filter(it=> !keepTitles.has(it.title+'|'+it.start+'|'+it.end))
+            ]
+          };
+          merged = allocatePlan(baseDay, reflowDraft);
+        }
+
+        store.plan = merged;
+        renderPlan(merged);
+
+        // 4) schedule local notifications 10 min before each item (only while tab is open)
+        scheduleLocalNotifications(merged);
+
+      }catch(e){
+        alert(e.message);
+      }
+    };
+
+    $('#resetPlan').onclick = ()=>{
+      store.plan = null;
+      renderPlan(null);
+    };
+
+    // Export ICS
+    $('#exportICS').onclick = ()=>{
+      const p = store.plan;
+      if(!p) return alert('No plan to export.');
+      const cal = ics();
+      for(const it of p.items){
+        if(!it.start || !it.end) continue;
+        const start = dayjs(p.day+'T'+it.start);
+        const end   = dayjs(p.day+'T'+it.end);
+        cal.addEvent(it.title, it.notes||'', '', 
+          [start.year(), start.month()+1, start.date(), start.hour(), start.minute()],
+          [end.year(), end.month()+1, end.date(), end.hour(), end.minute()],
+          { reminders: [{method:'display', minutes:10}] }
+        );
+      }
+      cal.download('plan_'+p.day);
+    };
+
+    function scheduleLocalNotifications(plan){
+      if(Notification.permission!=='granted') return;
+      const now = dayjs();
+      for(const it of plan.items){
+        if(!it.start) continue;
+        const when = dayjs(plan.day+'T'+it.start).subtract(10,'minute');
+        const ms = when.diff(now,'millisecond');
+        if(ms>0 && ms<24*60*60*1000){ // within 24h
+          setTimeout(()=>{
+            new Notification('Upcoming: '+it.title, { body: `${it.start}–${it.end} ${it.notes||''}` });
+          }, ms);
+        }
+      }
+    }
+
+    function detectBaseDay(text){
+      // Try to detect “tomorrow”, “today”, specific week days via chrono
+      const ref = new Date();
+      const parsed = chrono.parse(text, ref);
+      if(parsed?.length){
+        const d = parsed[0].start?.date();
+        if(d){
+          return dayjs(d).format('YYYY-MM-DD');
+        }
+      }
+      // If “tomorrow” explicit but chrono didn’t catch (rare), default
+      if(/tomorrow/i.test(text)) return dayjs().add(1,'day').format('YYYY-MM-DD');
+      return null;
+    }
+
+    /*****************
+     * Task Flows    *
+     *****************/
+    async function llmFlow(text){
+      const sys = `You convert a goal into a STRICT JSON step-by-step flow:
+Return ONLY JSON:
+{
+  "title": string,
+  "steps": [
+    {"id": 1, "title": string, "detail": string, "status": "todo"|"doing"|"done"},
+    ...
+  ],
+  "notes": string
+}
+Rules:
+- Break into 5–12 concrete steps maximum.
+- Be specific but concise (what to decide, what to look up, what to book).
+- Prefer a logical order and call out dependencies.`;
+      const out = await askOpenAI([
+        {role:'system', content: sys},
+        {role:'user', content: text}
+      ], {temperature:0.2});
+      try { return JSON.parse(out); } catch(e){ throw new Error('Flow JSON parse error. Output was:\n' + out); }
+    }
+
+    function renderFlow(flow){
+      const wrap = $('#flowSteps');
+      if(!flow){ wrap.innerHTML = '<div class="text-gray-500">No flow yet.</div>'; return; }
+      const steps = flow.steps?.map(s=>{
+        return `<div class="p-3 rounded-lg border bg-gray-50 flex gap-3 items-start">
+          <input type="checkbox" data-step="${s.id}" ${s.status==='done'?'checked':''} class="mt-1"/>
+          <div class="flex-1">
+            <div class="font-semibold">${escapeHtml(s.title)}</div>
+            <div class="text-sm text-gray-600 whitespace-pre-wrap">${escapeHtml(s.detail)}</div>
+            <div class="mt-1">
+              <select data-stat="${s.id}" class="card !py-1">
+                ${['todo','doing','done'].map(st=>`<option ${s.status===st?'selected':''}>${st}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      wrap.innerHTML = `
+        <div class="mb-2">
+          <div class="text-sm text-gray-500">Flow: ${escapeHtml(flow.title)}</div>
+          <textarea id="flowNotes" class="w-full card !py-2 mt-2" rows="2" placeholder="Notes...">${escapeHtml(flow.notes||'')}</textarea>
+          <div class="mt-2"><button id="saveNotes" class="btn btn-secondary">Save Notes</button></div>
+        </div>
+        <div class="space-y-2">${steps || ''}</div>
+      `;
+
+      wrap.querySelectorAll('[data-step]').forEach(cb=>{
+        cb.addEventListener('change', ()=>{
+          const id = Number(cb.dataset.step);
+          const f = store.flow; const st = f.steps.find(x=>x.id===id);
+          if(!st) return;
+          st.status = cb.checked ? 'done' : 'todo';
+          store.flow = f; renderFlow(f);
+        });
+      });
+      wrap.querySelectorAll('[data-stat]').forEach(sel=>{
+        sel.addEventListener('change', ()=>{
+          const id = Number(sel.dataset.stat);
+          const f = store.flow; const st = f.steps.find(x=>x.id===id);
+          if(!st) return;
+          st.status = sel.value;
+          store.flow = f; // no re-render needed
+        });
+      });
+      $('#saveNotes').onclick = ()=>{
+        const f = store.flow; f.notes = $('#flowNotes').value; store.flow = f; alert('Saved.');
+      };
+    }
+
+    $('#makeFlow').onclick = async ()=>{
+      const text = $('#flowInput').value.trim();
+      if(!text) return;
+      try{
+        const f = await llmFlow(text);
+        store.flow = f;
+        renderFlow(f);
+      }catch(e){
+        alert(e.message);
+      }
+    };
+    $('#resetFlow').onclick = ()=>{
+      store.flow = null; renderFlow(null);
+    };
+
+    // initial renders
+    renderPlan(store.plan);
+    renderFlow(store.flow);
+
+    /*************
+     * Utilities *
+     *************/
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m])); }
+  </script>
+</body>
+</html>
+
