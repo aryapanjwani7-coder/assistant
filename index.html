@@ -38,6 +38,8 @@
     .timeline-label { position:absolute; left:0; transform:translateY(-50%); font-size:12px; color:#6b7280; }
     .timeline-block { position:absolute; left:60px; right:8px; border-radius:10px; color:white; padding:8px; font-size:12px; box-shadow:0 8px 16px rgba(0,0,0,.08); }
     .timeline-now { position:absolute; left:0; right:0; height:2px; background:#ef4444; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef2ff; color:#3730a3; font-weight:600; }
+    .hint { font-size: 12px; color:#64748b; }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-emerald-50">
@@ -52,7 +54,11 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <input id="apiKey" type="password" placeholder="OpenAI API Key (sk-...)" class="w-72 card !py-2" />
+        <input id="apiKey" type="password" placeholder="OpenAI API Key (sk-...)" class="w-64 card !py-2" />
+        <select id="modelSelect" class="card !py-2">
+          <option value="gpt-4o">gpt-4o (best understanding)</option>
+          <option value="gpt-4o-mini" selected>gpt-4o-mini (cheaper)</option>
+        </select>
         <button id="saveKey" class="btn btn-primary flex items-center gap-2"><i data-lucide="save"></i>Save</button>
         <button id="clearKey" class="btn btn-ghost flex items-center gap-2"><i data-lucide="eraser"></i>Clear</button>
       </div>
@@ -82,7 +88,7 @@
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <h2 class="text-xl font-semibold">Smart Scheduling & Daily Planning</h2>
-          <span id="planDayBadge" class="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700"></span>
+          <span id="planDayBadge" class="badge"></span>
         </div>
         <div class="flex gap-2">
           <button id="notifyPerm" class="btn btn-ghost flex items-center gap-2"><i data-lucide="bell"></i>Enable Notifications</button>
@@ -90,44 +96,80 @@
         </div>
       </div>
 
-      <div class="text-sm text-slate-700">
-        <div class="font-semibold mb-1">Type naturally — AI will interpret it:</div>
-        <ul class="list-disc pl-5 space-y-1">
-          <li>tomorrow I'll have breakfast from 9-9:50am with Kobe at De Neve</li>
-          <li>physics 9–11 in Boelter 3400; lunch w/ Maya ~1 for 45m; meditate; cut nails (10m); sleep by 11</li>
-        </ul>
-      </div>
+      <div class="grid md:grid-cols-3 gap-4">
+        <!-- Inputs -->
+        <div class="md:col-span-2 space-y-2">
+          <div class="text-sm text-slate-700">
+            <div class="font-semibold mb-1">Type naturally — AI will interpret it:</div>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>tomorrow I'll have breakfast from 9-9:50am with Kobe at De Neve</li>
+              <li>physics 9–11 in Boelter 3400; lunch w/ Maya ~1 for 45m; meditate; cut nails (10m); sleep by 11; wake up 7:30</li>
+            </ul>
+          </div>
+          <textarea id="planInput" class="w-full card" rows="6" placeholder="Describe your day, even messily…"></textarea>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button id="makePlan" class="btn btn-primary flex items-center gap-2"><i data-lucide="sparkles"></i>Make / Update Plan</button>
+            <button id="resetPlan" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset Day</button>
+            <span class="hint">Tip: re-run “Make / Update Plan” to append new items; duplicates are ignored.</span>
+          </div>
+        </div>
 
-      <textarea id="planInput" class="w-full card" rows="5" placeholder="Describe your day, even messily…"></textarea>
-
-      <div class="flex flex-wrap gap-2 items-center">
-        <button id="makePlan" class="btn btn-primary flex items-center gap-2"><i data-lucide="sparkles"></i>Make / Update Plan</button>
-        <button id="resetPlan" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset Day</button>
-        <div class="flex items-center gap-2 ml-auto">
-          <button id="prevDay" class="btn btn-ghost" title="Previous Day"><i data-lucide="chevron-left"></i></button>
-          <div id="currentDayLabel" class="text-sm font-semibold"></div>
-          <button id="nextDay" class="btn btn-ghost" title="Next Day"><i data-lucide="chevron-right"></i></button>
-          <button id="jumpToday" class="btn btn-ghost" title="Today">Today</button>
+        <!-- Settings / Assumptions -->
+        <div class="space-y-2">
+          <h3 class="font-semibold flex items-center gap-2"><i data-lucide="settings"></i>Assumptions & Buffers</h3>
+          <div class="card space-y-2">
+            <div class="grid grid-cols-2 gap-2">
+              <label class="text-sm">Earliest start
+                <input id="earliestStart" class="card !py-2" placeholder="08:00" value="08:00">
+              </label>
+              <label class="text-sm">Latest end
+                <input id="latestEnd" class="card !py-2" placeholder="23:30" value="23:30">
+              </label>
+              <label class="text-sm">Min gap (m)
+                <input id="minGap" type="number" class="card !py-2" value="10">
+              </label>
+              <label class="text-sm">Travel buffer diff (m)
+                <input id="travelDiff" type="number" class="card !py-2" value="20">
+              </label>
+              <label class="text-sm">Travel buffer same (m)
+                <input id="travelSame" type="number" class="card !py-2" value="10">
+              </label>
+              <label class="text-sm">Home base (optional)
+                <input id="homeBase" class="card !py-2" placeholder="e.g., Dykstra">
+              </label>
+            </div>
+            <div id="clarifications" class="text-sm text-slate-600"></div>
+          </div>
         </div>
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
         <!-- Timeline (left) -->
         <div class="space-y-2">
-          <h3 class="font-semibold flex items-center gap-2"><i data-lucide="clock-8"></i>Timeline</h3>
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold flex items-center gap-2"><i data-lucide="clock-8"></i>Timeline</h3>
+            <div class="flex items-center gap-2">
+              <button id="prevDay" class="btn btn-ghost" title="Previous Day"><i data-lucide="chevron-left"></i></button>
+              <div id="currentDayLabel" class="text-sm font-semibold"></div>
+              <button id="nextDay" class="btn btn-ghost" title="Next Day"><i data-lucide="chevron-right"></i></button>
+              <button id="jumpToday" class="btn btn-ghost" title="Today">Today</button>
+            </div>
+          </div>
           <div class="bg-white rounded-xl border border-slate-100 p-3">
             <div id="timeline" class="relative h-[520px] overflow-hidden"></div>
           </div>
         </div>
+
         <!-- List (right) -->
         <div class="space-y-2">
           <h3 class="font-semibold flex items-center gap-2"><i data-lucide="table"></i>Schedule List (editable)</h3>
           <div id="planTable" class="bg-white rounded-xl p-3 text-sm border border-slate-100"></div>
+          <div id="unplaced" class="bg-white rounded-xl p-3 text-sm border border-amber-200"></div>
         </div>
       </div>
 
       <p class="text-xs text-slate-500">
-        Any item with start & end keeps that time (even meals). Flexible tasks are auto-placed into free gaps between 06:30 and 24:00.
+        Any item with start & end keeps that time (even meals). Flexible tasks are auto-placed into gaps **after** your earliest start and with buffers.
       </p>
     </section>
 
