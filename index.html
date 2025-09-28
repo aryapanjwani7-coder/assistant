@@ -4,66 +4,49 @@
   <meta charset="UTF-8" />
   <title>Your Unified AI Assistant (MVP)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- Fonts + Tailwind (CDN, zero build) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Fonts + Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-
   <!-- Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-
-  <!-- Day.js + tz -->
+  <!-- Day.js -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
   <script>dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);</script>
-
-  <!-- Chrono for natural-language time parsing -->
+  <!-- Chrono (local parsing) -->
   <script src="https://cdn.jsdelivr.net/npm/chrono-node/dist/chrono.min.js"></script>
-
-  <!-- ICS file generator -->
+  <!-- ICS -->
   <script src="https://cdn.jsdelivr.net/npm/ics/dist/ics.min.js"></script>
-
   <style>
-    :root {
-      --card-bg: rgba(255,255,255,0.9);
-    }
-    html, body { height: 100%; }
-    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; }
-    .card { background: var(--card-bg); border-radius: 1rem; box-shadow: 0 10px 30px rgba(2,6,23,0.06); padding: 1rem; }
-    .btn { border-radius: 0.75rem; padding: 0.6rem 0.9rem; font-weight: 600; }
-    .btn-primary { background: #2563eb; color: white; }
-    .btn-primary:hover { background: #1e40af; }
-    .btn-ghost { background: transparent; border: 1px solid rgba(0,0,0,0.08); }
-    .btn-ghost:hover { background: rgba(0,0,0,0.04); }
+    :root { --card: rgba(255,255,255,0.9); }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .card { background: var(--card); border-radius: 1rem; box-shadow: 0 10px 30px rgba(2,6,23,0.06); padding: 1rem; }
+    .btn { border-radius: 0.75rem; padding: .6rem .9rem; font-weight: 600; }
+    .btn-primary { background:#2563eb; color:#fff; } .btn-primary:hover{ background:#1e40af; }
+    .btn-ghost { background:transparent; border:1px solid rgba(0,0,0,.08); }
+    .btn-ghost:hover{ background:rgba(0,0,0,.04); }
     .glass { backdrop-filter: blur(8px); }
-    .mono { font-family: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-
-    /* Timeline */
-    .timeline-grid-line { position:absolute; left:0; right:0; border-top:1px dashed rgba(0,0,0,0.08); }
-    .timeline-label { position:absolute; left:0; transform: translateY(-50%); font-size: 12px; color: #6b7280; }
-    .timeline-block { position:absolute; left:60px; right:8px; border-radius: 10px; color:white; padding:8px; font-size:12px; box-shadow: 0 8px 16px rgba(0,0,0,0.08); }
-    .timeline-now { position:absolute; left:0; right:0; height:2px; background:#ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,0.15); }
+    .timeline-grid-line { position:absolute; left:0; right:0; border-top:1px dashed rgba(0,0,0,.08); }
+    .timeline-label { position:absolute; left:0; transform:translateY(-50%); font-size:12px; color:#6b7280; }
+    .timeline-block { position:absolute; left:60px; right:8px; border-radius:10px; color:white; padding:8px; font-size:12px; box-shadow:0 8px 16px rgba(0,0,0,.08); }
+    .timeline-now { position:absolute; left:0; right:0; height:2px; background:#ef4444; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-emerald-50">
-
   <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
     <!-- Header -->
     <header class="glass card flex flex-col md:flex-row md:items-center md:justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="rounded-xl p-2 bg-white shadow-sm">
-          <i data-lucide="bot" class="w-6 h-6 text-indigo-600"></i>
-        </div>
+        <div class="rounded-xl p-2 bg-white shadow-sm"><i data-lucide="bot" class="w-6 h-6 text-indigo-600"></i></div>
         <div>
           <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Unified AI Assistant (MVP)</h1>
           <p class="text-sm text-slate-500">Chat • Plan • Flows — all in one lightweight page</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <input id="apiKey" type="password" placeholder="OpenAI API Key (sk-...)" class="w-72 card !py-2" />
+        <input id="apiKey" type="password" placeholder="(Optional) OpenAI API Key (sk-...)" class="w-72 card !py-2" />
         <button id="saveKey" class="btn btn-primary flex items-center gap-2"><i data-lucide="save"></i>Save</button>
         <button id="clearKey" class="btn btn-ghost flex items-center gap-2"><i data-lucide="eraser"></i>Clear</button>
       </div>
@@ -72,15 +55,14 @@
     <!-- Tabs -->
     <nav class="glass card flex gap-2">
       <button data-tab="chat"  class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="message-circle"></i>Chat</button>
-      <button data-tab="plan"  class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="calendar"></i>Plan My Day</button>
-      <button data-tab="flows" class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="list-todo"></i>Task Flows</button>
+      <button data-tab="plan"  class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="calendar"></i>Plan</button>
+      <button data-tab="flows" class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="list-todo"></i>Flows</button>
     </nav>
 
     <!-- Chat -->
     <section id="chat" class="glass card space-y-3 hidden">
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-semibold">General Knowledge & Conversation</h2>
-        <span class="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700">Model: gpt-4o-mini</span>
       </div>
       <div id="chatLog" class="bg-white/70 rounded-xl p-3 h-80 overflow-auto text-sm space-y-3 border border-slate-100"></div>
       <div class="flex gap-2">
@@ -102,49 +84,55 @@
         </div>
       </div>
 
-      <div class="text-sm text-slate-600">
-        Describe your day (example: “I live in Dykstra. Tomorrow physics 9–11am in Boelter, then CS 2–3pm. Need breakfast, lunch, dinner, laundry 1h15m. Sleep by 11pm. Plan my day.”)
+      <div class="text-sm text-slate-700">
+        <div class="font-semibold mb-1">Examples (one per line works best):</div>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>Tomorrow breakfast with Kobe 9:00–9:50 at De Neve.</li>
+          <li>Physics 9–11 in Boelter 3400.</li>
+          <li>Lunch with Maya at 1pm for 45m.</li>
+          <li>Dinner with Arjun 7–8pm in Westwood.</li>
+          <li>Cut nails (10m)</li>
+          <li>Meditate (20m)</li>
+          <li>Sleep by 11pm</li>
+        </ul>
       </div>
 
-      <textarea id="planInput" class="w-full card" rows="4" placeholder="Type your day here..."></textarea>
+      <textarea id="planInput" class="w-full card" rows="5" placeholder="Type your day here..."></textarea>
 
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap gap-2 items-center">
         <button id="makePlan" class="btn btn-primary flex items-center gap-2"><i data-lucide="wand-2"></i>Make / Update Plan</button>
-        <button id="resetPlan" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset</button>
+        <button id="resetPlan" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset Day</button>
         <div class="flex items-center gap-2 ml-auto">
-          <button id="prevDay" class="btn btn-ghost"><i data-lucide="chevron-left"></i></button>
+          <button id="prevDay" class="btn btn-ghost" title="Previous Day"><i data-lucide="chevron-left"></i></button>
           <div id="currentDayLabel" class="text-sm font-semibold"></div>
-          <button id="nextDay" class="btn btn-ghost"><i data-lucide="chevron-right"></i></button>
+          <button id="nextDay" class="btn btn-ghost" title="Next Day"><i data-lucide="chevron-right"></i></button>
+          <button id="jumpToday" class="btn btn-ghost" title="Today">Today</button>
         </div>
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
-        <!-- Left: Timeline -->
+        <!-- Timeline (left) -->
         <div class="space-y-2">
           <h3 class="font-semibold flex items-center gap-2"><i data-lucide="clock-8"></i>Timeline</h3>
           <div class="bg-white rounded-xl border border-slate-100 p-3">
             <div id="timeline" class="relative h-[520px] overflow-hidden"></div>
           </div>
         </div>
-
-        <!-- Right: Structured Plan -->
+        <!-- List (right) -->
         <div class="space-y-2">
-          <h3 class="font-semibold flex items-center gap-2"><i data-lucide="table"></i>Structured Plan (editable)</h3>
+          <h3 class="font-semibold flex items-center gap-2"><i data-lucide="table"></i>Schedule List (editable)</h3>
           <div id="planTable" class="bg-white rounded-xl p-3 text-sm border border-slate-100"></div>
         </div>
       </div>
 
       <p class="text-xs text-slate-500">
-        Tip: After the first plan, you can add updates like “class cancelled 2–3pm” or “add gym 45m” and click “Make / Update Plan”.
+        Fixed items keep their exact times. Flexible tasks (like “cut nails”, “meditate 20m”) are automatically placed into free gaps between 06:30 and 24:00.
       </p>
     </section>
 
     <!-- Flows -->
     <section id="flows" class="glass card space-y-4 hidden">
       <h2 class="text-xl font-semibold">Task-Flow Assistant</h2>
-      <p class="text-sm text-slate-600">
-        Example: “Book a round trip to India from LAX, Dec 15–Jan 5. Budget $1500. Prefer non-stop if possible.”
-      </p>
       <textarea id="flowInput" class="w-full card" rows="3" placeholder="Describe your goal..."></textarea>
       <div class="flex gap-2">
         <button id="makeFlow" class="btn btn-primary flex items-center gap-2"><i data-lucide="waypoints"></i>Create / Update Flow</button>
@@ -154,22 +142,18 @@
     </section>
 
     <footer class="text-xs text-slate-500 text-center py-4">
-      MVP for personal use. No backend. Data saved in your browser. Export calendars to .ics for phone/Google/Apple Calendar.
+      MVP for personal use. Plans are saved per day in your browser. Export to calendar when needed.
     </footer>
   </div>
 
   <script>
-    /**********************
-     * Init icons
-     **********************/
+    // ---------- Init ----------
     window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); });
 
-    /**********************
-     * Simple state/store *
-     **********************/
     const $ = (s)=>document.querySelector(s);
     const $$ = (s)=>document.querySelectorAll(s);
 
+    // ---------- Persistent store (per-day plans) ----------
     const store = {
       get key(){ return localStorage.getItem('OPENAI_KEY') || ''; },
       set key(v){ localStorage.setItem('OPENAI_KEY', v); },
@@ -177,17 +161,22 @@
       get chatHistory(){ return JSON.parse(localStorage.getItem('CHAT_HISTORY') || '[]'); },
       set chatHistory(v){ localStorage.setItem('CHAT_HISTORY', JSON.stringify(v)); },
 
-      get plan(){ return JSON.parse(localStorage.getItem('PLAN_V1') || 'null'); },
-      set plan(v){ localStorage.setItem('PLAN_V1', JSON.stringify(v)); },
-
-      get flow(){ return JSON.parse(localStorage.getItem('FLOW_V1') || 'null'); },
-      set flow(v){ localStorage.setItem('FLOW_V1', JSON.stringify(v)); },
+      // PLANS_BY_DAY: { "YYYY-MM-DD": { day, items:[...] } }
+      get plans(){ return JSON.parse(localStorage.getItem('PLANS_BY_DAY') || '{}'); },
+      set plans(v){ localStorage.setItem('PLANS_BY_DAY', JSON.stringify(v)); },
 
       get planDay(){ return localStorage.getItem('PLAN_DAY') || dayjs().format('YYYY-MM-DD'); },
       set planDay(v){ localStorage.setItem('PLAN_DAY', v); },
     };
 
-    // Tabs
+    function getPlan(day){ return store.plans[day] || null; }
+    function setPlan(day, plan){
+      const all = store.plans;
+      all[day] = plan;
+      store.plans = all;
+    }
+
+    // ---------- Tabs ----------
     const tabs = $$('.tab');
     const sections = ['chat','plan','flows'];
     tabs.forEach(btn=>{
@@ -199,50 +188,35 @@
         lucide.createIcons();
       });
     });
-    // Default to chat
-    document.querySelector('[data-tab="chat"]').click();
+    document.querySelector('[data-tab="plan"]').click();
 
-    // API key controls
+    // ---------- API Key ----------
     $('#apiKey').value = store.key;
     $('#saveKey').onclick = ()=>{ store.key = $('#apiKey').value.trim(); alert('Saved!'); };
     $('#clearKey').onclick = ()=>{ localStorage.removeItem('OPENAI_KEY'); $('#apiKey').value=''; alert('Cleared!'); };
 
-    // Notifications
-    $('#notifyPerm').onclick = async ()=>{
-      const s = await Notification.requestPermission();
-      alert('Notification permission: ' + s);
-    };
+    // ---------- Notifications ----------
+    $('#notifyPerm').onclick = async ()=>{ const s = await Notification.requestPermission(); alert('Notification permission: ' + s); };
 
-    /*****************
-     * OpenAI helper *
-     *****************/
+    // ---------- OpenAI helper (optional; used only when present) ----------
     const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-
-    // JSON-mode aware call
     async function askOpenAI(messages, {model='gpt-4o-mini', temperature=0.2, json=false} = {}){
       const key = store.key;
-      if(!key){ throw new Error('Missing OpenAI API key. Add it at the top.'); }
+      if(!key) throw new Error('No OpenAI key found.');
       const body = { model, temperature, messages };
-      if(json){ body.response_format = { type: 'json_object' }; }
+      if(json) body.response_format = { type: 'json_object' };
       const res = await fetch(OPENAI_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        method: 'POST', headers: {'Content-Type':'application/json','Authorization':'Bearer '+key},
         body: JSON.stringify(body)
       });
-      if(!res.ok){
-        const t = await res.text();
-        throw new Error('OpenAI error: ' + t);
-      }
+      if(!res.ok){ throw new Error(await res.text()); }
       const data = await res.json();
       return data.choices?.[0]?.message?.content?.trim() || '';
     }
 
-    /********
-     * Chat *
-     ********/
+    // ---------- Chat ----------
     function renderChat(){
-      const log = $('#chatLog');
-      log.innerHTML = '';
+      const log = $('#chatLog'); log.innerHTML = '';
       for(const m of store.chatHistory){
         const me = m.role==='user';
         const bubble = document.createElement('div');
@@ -252,84 +226,133 @@
       }
       log.scrollTop = log.scrollHeight;
     }
-    renderChat();
-
     $('#sendChat').onclick = async ()=>{
-      const input = $('#chatInput');
-      const text = input.value.trim();
-      if(!text) return;
-      const hist = store.chatHistory;
-      hist.push({role:'user', content:text});
-      store.chatHistory = hist;
-      renderChat();
-      input.value = '';
+      const t = $('#chatInput').value.trim(); if(!t) return;
+      const hist = store.chatHistory; hist.push({role:'user', content:t}); store.chatHistory = hist; renderChat(); $('#chatInput').value='';
       try{
-        const answer = await askOpenAI([
-          {role:'system', content:'You are a helpful, concise assistant.'},
-          ...store.chatHistory
-        ]);
-        hist.push({role:'assistant', content:answer});
-        store.chatHistory = hist;
-        renderChat();
-      }catch(e){ alert(e.message); }
+        const answer = await askOpenAI([{role:'system', content:'Be helpful and concise.'}, ...store.chatHistory]);
+        hist.push({role:'assistant', content:answer}); store.chatHistory = hist; renderChat();
+      }catch(e){ alert('Chat error: '+e.message); }
     };
 
-    /***********************
-     * Planner / Scheduler *
-     ***********************/
-    function emptyPlan(dayIso){
-      return { day: dayIso, items: [] };
+    // ---------- Planner ----------
+    const startHr = 6, endHr = 24;
+
+    function emptyPlan(dayIso){ return { day: dayIso, items: [] }; }
+
+    // Local fallback parser: turns plain sentences into items (no LLM needed)
+    function localDraft(text, baseDayIso){
+      const lines = text.split(/\n+|[.;]\s+/).map(s=>s.trim()).filter(Boolean);
+      const items = [];
+      const defaultDurByKeyword = (title)=>{
+        const t = title.toLowerCase();
+        if(t.includes('breakfast')) return 30;
+        if(t.includes('lunch')) return 45;
+        if(t.includes('dinner')) return 45;
+        if(t.includes('meditat')) return 20;
+        if(t.includes('nail')) return 10;
+        return 30;
+      };
+      for(const line of lines){
+        const parsed = chrono.parse(line, new Date());
+        // Extract explicit duration like "1h15m" or "45m" or "(20m)"
+        const durMatch = line.match(/(\d+)\s*h(?:\s*(\d+)\s*m)?|(\d+)\s*m/i);
+        const durMin = durMatch ? (durMatch[3] ? parseInt(durMatch[3]) : (parseInt(durMatch[1]||0)*60 + parseInt(durMatch[2]||0))) : null;
+
+        const baseTitle = line
+          .replace(/\b(tomorrow|today|at|from|until|till|to)\b/gi,'')
+          .replace(/\d{1,2}\s*[:.]?\d{0,2}\s*(am|pm)?/gi,'')
+          .replace(/\b(\d+)\s*h(\s*\d+\s*m)?\b/gi,'')
+          .replace(/\b(\d+)\s*m\b/gi,'')
+          .replace(/\s{2,}/g,' ')
+          .trim()
+          .replace(/^[-–—,:]+/,'')
+          .trim();
+
+        function titleWithWith(){
+          // keep "with X" if present
+          const m = line.match(/(.+?)(with\s+[^,.;]+)(.*)/i);
+          if(m){
+            const left = m[1].replace(/\d.*$/,'').trim();
+            return (left ? left + ' ' : '') + m[2].trim();
+          }
+          return baseTitle || 'Task';
+        }
+
+        if(parsed.length){
+          // If two endpoints (9 to 9:50), make fixed
+          if(parsed[0].start && parsed[0].end){
+            const s = parsed[0].start.date(); const e = parsed[0].end.date();
+            const start = dayjs(s).format('HH:mm'); const end = dayjs(e).format('HH:mm');
+            items.push({ title: titleWithWith(), type:'fixed', start, end, duration_min: dayjs(e).diff(dayjs(s),'minute'), notes:'' });
+            continue;
+          }
+          // One time -> build using duration if any
+          if(parsed[0].start){
+            const s = parsed[0].start.date();
+            const start = dayjs(s).format('HH:mm');
+            if(durMin){
+              const end = dayjs(s).add(durMin,'minute').format('HH:mm');
+              items.push({ title: titleWithWith(), type:'fixed', start, end, duration_min: durMin, notes:'' });
+            }else{
+              // treat as fixed with default duration by keyword
+              const d = defaultDurByKeyword(baseTitle);
+              const end = dayjs(s).add(d,'minute').format('HH:mm');
+              items.push({ title: titleWithWith(), type:'fixed', start, end, duration_min: d, notes:'' });
+            }
+            continue;
+          }
+        }
+        // No explicit time -> flexible
+        const d = durMin || defaultDurByKeyword(baseTitle);
+        // detect meals
+        const tt = baseTitle.toLowerCase();
+        const type = (tt.includes('breakfast')||tt.includes('lunch')||tt.includes('dinner')) ? 'meal' : 'flexible';
+        items.push({ title: titleWithWith(), type, start:'', end:'', duration_min: d, notes:'' });
+      }
+      // Sleep by X
+      const sleepM = text.match(/sleep\s+by\s+([0-9:.\sapm]+)/i);
+      if(sleepM){
+        const tParsed = chrono.parse('at '+sleepM[1], new Date());
+        if(tParsed[0]?.start){
+          const e = dayjs(tParsed[0].start.date()).format('HH:mm');
+          items.push({title:'Sleep', type:'rest', start:'', end:e, duration_min:0, notes:''});
+        }
+      }
+      return { items };
     }
 
-    // Strict JSON draft via LLM
+    // Optional: LLM structuring (if key supplied). Falls back to localDraft on any error.
     async function llmPlanDraft(text, baseDayIso){
-      const sys = `You convert a free-text daily plan into STRICT JSON: {"items":[...]}.
-Rules:
-- Return ONLY a JSON object.
-- Each item:
-  { "title": string,
-    "type": "fixed"|"flexible"|"meal"|"rest",
-    "duration_min": number (for non-fixed unless explicit times),
-    "start": "HH:mm" or "",
-    "end": "HH:mm" or "",
-    "notes": string }
-- "fixed" requires start & end.
-- If sleep target present, include a "rest" block (start/end or duration).
-- Meals default durations: breakfast 30, lunch 45, dinner 45 if not specified.
-- Infer durations like "1h15m" => 75.
-- Note locations if mentioned.
-- Assume date is ${baseDayIso}.`;
+      const sys = `Convert a daily description into STRICT JSON: {"items":[
+{ "title": string, "type":"fixed"|"flexible"|"meal"|"rest", "duration_min": number, "start": "HH:mm"|"", "end":"HH:mm"|"" , "notes": string }
+]}. Rules: fixed needs start+end; meals default 30/45/45; preserve "with <name>" in title; assume date ${baseDayIso}. Return ONLY JSON.`;
       const user = `Text: """${text}"""`;
-      const out = await askOpenAI(
-        [{role:'system', content: sys},{role:'user', content: user}],
-        {temperature:0.1, json:true}
-      );
-      try { return JSON.parse(out); } catch(e){ throw new Error('Planner JSON parse error. Output was:\n' + out); }
+      const out = await askOpenAI([{role:'system', content:sys},{role:'user', content:user}], {temperature:0.1, json:true});
+      try { return JSON.parse(out); } catch(e){ throw new Error('bad json'); }
     }
 
-    // Allocate flexible around fixed between 06:30 and 23:00
+    // Allocate flexible around fixed between 06:30 and 24:00
     function allocatePlan(baseDayIso, draft){
       const startOfDay = dayjs(baseDayIso + 'T06:30');
       const endOfDay   = dayjs(baseDayIso + 'T24:00');
-
       const toTime = (hhmm)=>dayjs(baseDayIso + 'T' + hhmm.padStart(5,'0'));
-      const fixed = [], flex = [];
 
+      const fixed = [], flex = [];
       for(const raw of (draft.items||[])){
         const it = {...raw};
         if(it.type==='fixed' && it.start && it.end){
           fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
+        }else if(it.type==='rest' && it.start && it.end){
+          fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
         }else{
+          // normalize meals
           let d = Number(it.duration_min)||0;
           if(it.type==='meal' && !d){
             const t = (it.title||'').toLowerCase();
-            if(t.includes('breakfast')) d = 30; else if(t.includes('lunch')) d=45; else if(t.includes('dinner')) d=45; else d=30;
+            d = t.includes('breakfast') ? 30 : (t.includes('lunch')||t.includes('dinner')) ? 45 : 30;
           }
-          if(it.type==='rest' && it.start && it.end){
-            fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
-          }else{
-            flex.push({...it, duration_min: d||30});
-          }
+          flex.push({...it, duration_min: d || 30});
         }
       }
 
@@ -369,31 +392,29 @@ Rules:
       return { day: baseDayIso, items };
     }
 
-    // Detect base day from text (chrono) or fallback to selected day
     function detectBaseDay(text){
-      const ref = new Date();
-      const parsed = chrono.parse(text, ref);
-      if(parsed?.length){
-        const d = parsed[0].start?.date();
+      const p = chrono.parse(text, new Date());
+      if(p?.length){
+        const d = p[0].start?.date();
         if(d) return dayjs(d).format('YYYY-MM-DD');
       }
       if(/tomorrow/i.test(text)) return dayjs().add(1,'day').format('YYYY-MM-DD');
       if(/today/i.test(text)) return dayjs().format('YYYY-MM-DD');
-      return null;
+      return store.planDay || dayjs().format('YYYY-MM-DD');
     }
 
     // Renders
-    function renderPlan(plan){
-      const wrap = $('#planTable');
-      const badge = $('#planDayBadge');
-      const label = $('#currentDayLabel');
-
-      const day = store.planDay;
+    function renderPlanFor(day){
+      store.planDay = day;
+      const badge = $('#planDayBadge'); const label = $('#currentDayLabel');
       badge.textContent = 'Day: ' + day;
       label.textContent = dayjs(day).format('ddd, MMM D, YYYY');
+      renderPlan(getPlan(day));
+    }
 
-      if(!plan){ wrap.innerHTML = '<div class="text-slate-500">No plan yet.</div>'; renderTimeline(null); return; }
-
+    function renderPlan(plan){
+      const wrap = $('#planTable');
+      if(!plan){ wrap.innerHTML = '<div class="text-slate-500">No plan yet. Add items and click “Make / Update Plan”.</div>'; renderTimeline(null); return; }
       const rows = plan.items.map(it=>`
         <div class="grid grid-cols-12 items-center gap-2 py-1 border-b border-slate-100">
           <input class="col-span-4 card !py-1" data-edit="title" data-id="${it.id}" value="${escapeHtml(it.title)}" />
@@ -405,7 +426,6 @@ Rules:
           <input class="col-span-2 card !py-1" data-edit="notes" data-id="${it.id}" value="${escapeHtml(it.notes||'')}" placeholder="notes"/>
         </div>
       `).join('');
-
       wrap.innerHTML = `
         <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 pb-1">
           <div class="col-span-4">Title</div>
@@ -415,167 +435,128 @@ Rules:
           <div class="col-span-2">Notes</div>
         </div>
         ${rows || '<div class="text-slate-500">No items.</div>'}
-        <div class="pt-2">
-          <button id="addRow" class="btn btn-ghost flex items-center gap-2"><i data-lucide="plus"></i>Add Item</button>
-        </div>
+        <div class="pt-2"><button id="addRow" class="btn btn-ghost flex items-center gap-2"><i data-lucide="plus"></i>Add Item</button></div>
       `;
-
       wrap.querySelectorAll('[data-edit]').forEach(inp=>{
         inp.addEventListener('change', ()=>{
-          const id = Number(inp.dataset.id);
-          const key= inp.dataset.edit;
-          const val= inp.value;
-          const p = store.plan;
-          const it = p.items.find(x=>x.id===id);
-          if(!it) return;
-          it[key] = val;
-          store.plan = p;
-          renderPlan(p);
+          const id = Number(inp.dataset.id), key = inp.dataset.edit, val = inp.value;
+          const day = store.planDay; const p = getPlan(day) || emptyPlan(day);
+          const it = p.items.find(x=>x.id===id); if(!it) return;
+          it[key] = val; setPlan(day, p); renderPlan(p);
         });
       });
       $('#addRow').onclick = ()=>{
-        const p = store.plan || emptyPlan(store.planDay);
-        p.items.push({id: (p.items.at(-1)?.id||0)+1, title:'New Task', type:'flexible', start:'', end:'', duration_min:30, notes:''});
-        store.plan = p;
-        renderPlan(p);
+        const day = store.planDay; const p = getPlan(day) || emptyPlan(day);
+        p.items.push({id:(p.items.at(-1)?.id||0)+1, title:'New Task', type:'flexible', start:'', end:'', duration_min:30, notes:''});
+        setPlan(day, p); renderPlan(p);
       };
       lucide.createIcons();
-
       renderTimeline(plan);
     }
 
     function renderTimeline(plan){
-      const tl = $('#timeline');
-      tl.innerHTML = '';
-      const startHr = 6, endHr = 24;
-      const day = store.planDay;
-      const totalMin = (endHr - startHr) * 60;
-
+      const tl = $('#timeline'); tl.innerHTML = '';
+      const totalMin = (endHr - startHr)*60;
       // grid
       for(let h=startHr; h<=endHr; h++){
         const y = ((h-startHr)/(endHr-startHr))*100;
-        const line = document.createElement('div');
-        line.className='timeline-grid-line';
-        line.style.top = y + '%';
-        tl.appendChild(line);
-
-        const lbl = document.createElement('div');
-        lbl.className='timeline-label';
-        lbl.style.top = y + '%';
-        lbl.textContent = (h<10?'0':'')+h+':00';
-        tl.appendChild(lbl);
+        const line = document.createElement('div'); line.className='timeline-grid-line'; line.style.top = y+'%'; tl.appendChild(line);
+        const lbl = document.createElement('div'); lbl.className='timeline-label'; lbl.style.top = y+'%'; lbl.textContent = (h<10?'0':'')+h+':00'; tl.appendChild(lbl);
       }
-
+      const day = store.planDay;
       if(plan){
         for(const it of plan.items){
           if(!it.start || !it.end) continue;
           const s = dayjs(day+'T'+it.start), e = dayjs(day+'T'+it.end);
           const startMin = (s.hour()-startHr)*60 + s.minute();
-          const durMin   = Math.max(10, e.diff(s,'minute')); // min height
-          const topPct   = (startMin/totalMin)*100;
-          const heightPct= (durMin/totalMin)*100;
-
+          const durMin = Math.max(10, e.diff(s,'minute'));
+          const topPct = (startMin/totalMin)*100;
+          const heightPct = (durMin/totalMin)*100;
           const block = document.createElement('div');
-          block.className = 'timeline-block';
-          block.style.top = topPct + '%';
-          block.style.height = heightPct + '%';
+          block.className='timeline-block';
+          block.style.top = topPct+'%'; block.style.height=heightPct+'%';
           block.style.background = colorForType(it.type);
           block.innerHTML = `<div class="font-semibold text-[13px]">${escapeHtml(it.title)}</div><div class="opacity-90">${it.start}–${it.end}</div>`;
           tl.appendChild(block);
         }
       }
-
-      // current-time line (only if viewing today)
-      const todayIso = dayjs().format('YYYY-MM-DD');
-      if(day === todayIso){
-        const now = dayjs();
-        const nowMin = (now.hour()-startHr)*60 + now.minute();
-        if(nowMin >= 0 && nowMin <= totalMin){
-          const nowPct = (nowMin/totalMin)*100;
-          const nowLine = document.createElement('div');
-          nowLine.className = 'timeline-now';
-          nowLine.style.top = nowPct + '%';
-          tl.appendChild(nowLine);
+      // current time line if today
+      const today = dayjs().format('YYYY-MM-DD');
+      if(day===today){
+        const now = dayjs(); const nowMin = (now.hour()-startHr)*60 + now.minute();
+        if(nowMin>=0 && nowMin<=totalMin){
+          const nowLine = document.createElement('div'); nowLine.className='timeline-now';
+          nowLine.style.top = ((nowMin/totalMin)*100)+'%'; tl.appendChild(nowLine);
         }
       }
     }
 
     function colorForType(t){
-      if(t==='fixed') return '#2563eb';     // blue
-      if(t==='meal') return '#10b981';      // emerald
-      if(t==='rest') return '#8b5cf6';      // violet
-      return '#f59e0b';                     // amber
+      if(t==='fixed') return '#2563eb';
+      if(t==='meal') return '#10b981';
+      if(t==='rest') return '#8b5cf6';
+      return '#f59e0b';
     }
 
     // Make / Update plan
     $('#makePlan').onclick = async ()=>{
       const text = $('#planInput').value.trim();
-      const detected = detectBaseDay(text);
-      const baseDay = detected || store.planDay || dayjs().format('YYYY-MM-DD');
+      const baseDay = detectBaseDay(text);
       store.planDay = baseDay;
 
-      try{
-        const draft = await llmPlanDraft(text || 'Today: breakfast, study 2h, lunch, physics 9:00-11:00, gym 1h, dinner, sleep by 23:00.', baseDay);
-        const norm = { items: Array.isArray(draft.items) ? draft.items : (Array.isArray(draft) ? draft : []) };
-
-        // If same day existed, lock user-edited fixed items and reflow others
-        const prior = store.plan;
-        let finalPlan;
-        if(prior && prior.day === baseDay){
-          const locked = prior.items.filter(it=>it.start && it.end);
-          const reflowDraft = {
-            items: [
-              ...locked.map(it=>({title:it.title, type:it.type, start:it.start, end:it.end, notes:it.notes})),
-              ...norm.items
-            ]
-          };
-          finalPlan = allocatePlan(baseDay, reflowDraft);
-        } else {
-          finalPlan = allocatePlan(baseDay, norm);
-        }
-
-        store.plan = finalPlan;
-        renderPlan(finalPlan);
-        scheduleLocalNotifications(finalPlan);
-
-      }catch(e){
-        alert(e.message);
+      // 1) Try LLM if key present, otherwise local
+      let draft;
+      if(store.key){
+        try{ draft = await llmPlanDraft(text, baseDay); } catch { draft = localDraft(text, baseDay); }
+      } else {
+        draft = localDraft(text, baseDay);
       }
+
+      // 2) If same day had plan, keep user-fixed items and reflow the rest
+      const prior = getPlan(baseDay);
+      let toAllocate = draft;
+      if(prior){
+        const locked = prior.items.filter(it=>it.start && it.end);
+        toAllocate = { items: [
+          ...locked.map(it=>({title:it.title, type:it.type, start:it.start, end:it.end, duration_min:it.duration_min, notes:it.notes||''})),
+          ...draft.items
+        ] };
+      }
+
+      // 3) Allocate and save
+      const finalPlan = allocatePlan(baseDay, toAllocate);
+      setPlan(baseDay, finalPlan);
+      renderPlanFor(baseDay);
+      scheduleLocalNotifications(finalPlan);
     };
 
     $('#resetPlan').onclick = ()=>{
-      store.plan = null;
-      renderPlan(null);
+      const day = store.planDay;
+      const all = store.plans; delete all[day]; store.plans = all;
+      renderPlanFor(day);
     };
 
     // Day navigation
-    function shiftDay(delta){
-      const newDay = dayjs(store.planDay).add(delta,'day').format('YYYY-MM-DD');
-      store.planDay = newDay;
-      // if stored plan for that day exists, show it; else show empty plan (until user plans)
-      const p = store.plan && store.plan.day === newDay ? store.plan : null;
-      renderPlan(p);
-    }
+    function shiftDay(d){ renderPlanFor(dayjs(store.planDay).add(d,'day').format('YYYY-MM-DD')); }
     $('#prevDay').onclick = ()=>shiftDay(-1);
     $('#nextDay').onclick = ()=>shiftDay(1);
+    $('#jumpToday').onclick = ()=>renderPlanFor(dayjs().format('YYYY-MM-DD'));
 
-    // Export ICS
+    // Export ICS for current day
     $('#exportICS').onclick = ()=>{
-      const p = store.plan;
-      const day = store.planDay;
-      if(!p || p.day !== day || !p.items?.length) return alert('No plan to export for '+day+'.');
+      const day = store.planDay; const p = getPlan(day);
+      if(!p || !p.items?.length) return alert('No plan to export for '+day+'.');
       const cal = ics();
       for(const it of p.items){
         if(!it.start || !it.end) continue;
-        const start = dayjs(p.day+'T'+it.start);
-        const end   = dayjs(p.day+'T'+it.end);
-        cal.addEvent(it.title, it.notes||'', '',
+        const start = dayjs(day+'T'+it.start); const end = dayjs(day+'T'+it.end);
+        cal.addEvent(it.title, it.notes||'', '', 
           [start.year(), start.month()+1, start.date(), start.hour(), start.minute()],
           [end.year(), end.month()+1, end.date(), end.hour(), end.minute()],
           { reminders: [{method:'display', minutes:10}] }
         );
       }
-      cal.download('plan_'+p.day);
+      cal.download('plan_'+day);
     };
 
     function scheduleLocalNotifications(plan){
@@ -586,34 +567,20 @@ Rules:
         const when = dayjs(plan.day+'T'+it.start).subtract(10,'minute');
         const ms = when.diff(now,'millisecond');
         if(ms>0 && ms<24*60*60*1000){
-          setTimeout(()=>{
-            new Notification('Upcoming: '+it.title, { body: `${it.start}–${it.end} ${it.notes||''}` });
-          }, ms);
+          setTimeout(()=>{ new Notification('Upcoming: '+it.title, { body: `${it.start}–${it.end} ${it.notes||''}` }); }, ms);
         }
       }
     }
 
-    /*****************
-     * Task Flows    *
-     *****************/
+    // ---------- Flows ----------
     async function llmFlow(text){
-      const sys = `Convert a goal into STRICT JSON:
-{
-  "title": string,
-  "steps": [{"id":1,"title":string,"detail":string,"status":"todo"|"doing"|"done"},...],
-  "notes": string
-}
-- 5–12 steps, specific and concise, with dependencies. Return ONLY JSON.`;
-      const out = await askOpenAI(
-        [{role:'system', content: sys},{role:'user', content: text}],
-        {temperature:0.2, json:true}
-      );
-      try { return JSON.parse(out); } catch(e){ throw new Error('Flow JSON parse error. Output was:\n' + out); }
+      if(!store.key) throw new Error('Add API key to use Flows.');
+      const sys = `Return STRICT JSON: {"title":string,"steps":[{"id":1,"title":string,"detail":string,"status":"todo"|"doing"|"done"}...],"notes":string}`;
+      const out = await askOpenAI([{role:'system', content:sys},{role:'user', content:text}], {temperature:0.2, json:true});
+      return JSON.parse(out);
     }
-
     function renderFlow(flow){
-      const wrap = $('#flowSteps');
-      if(!flow){ wrap.innerHTML = '<div class="text-slate-500">No flow yet.</div>'; return; }
+      const wrap = $('#flowSteps'); if(!flow){ wrap.innerHTML='<div class="text-slate-500">No flow yet.</div>'; return; }
       const steps = flow.steps?.map(s=>`
         <div class="p-3 rounded-xl border bg-white flex gap-3 items-start border-slate-100">
           <input type="checkbox" data-step="${s.id}" ${s.status==='done'?'checked':''} class="mt-1"/>
@@ -626,58 +593,42 @@ Rules:
               </select>
             </div>
           </div>
-        </div>
-      `).join('');
+        </div>`).join('');
       wrap.innerHTML = `
         <div class="mb-2">
-          <div class="text-sm text-slate-500">Flow: ${escapeHtml(flow.title)}</div>
           <textarea id="flowNotes" class="w-full card !py-2 mt-2" rows="2" placeholder="Notes...">${escapeHtml(flow.notes||'')}</textarea>
           <div class="mt-2"><button id="saveNotes" class="btn btn-ghost flex items-center gap-2"><i data-lucide="save"></i>Save Notes</button></div>
         </div>
-        <div class="space-y-2">${steps || ''}</div>
-      `;
+        <div class="space-y-2">${steps||''}</div>`;
       wrap.querySelectorAll('[data-step]').forEach(cb=>{
-        cb.addEventListener('change', ()=>{
-          const id = Number(cb.dataset.step);
-          const f = store.flow; const st = f.steps.find(x=>x.id===id);
-          if(!st) return;
-          st.status = cb.checked ? 'done' : 'todo';
-          store.flow = f; renderFlow(f);
-        });
+        cb.addEventListener('change', ()=>{ const id=+cb.dataset.step; const f=JSON.parse(localStorage.getItem('FLOW_V1')||'null'); if(!f) return; const st=f.steps.find(x=>x.id===id); if(!st)return; st.status=cb.checked?'done':'todo'; localStorage.setItem('FLOW_V1', JSON.stringify(f)); renderFlow(f); });
       });
       wrap.querySelectorAll('[data-stat]').forEach(sel=>{
-        sel.addEventListener('change', ()=>{
-          const id = Number(sel.dataset.stat);
-          const f = store.flow; const st = f.steps.find(x=>x.id===id);
-          if(!st) return;
-          st.status = sel.value;
-          store.flow = f;
-        });
+        sel.addEventListener('change', ()=>{ const id=+sel.dataset.stat; const f=JSON.parse(localStorage.getItem('FLOW_V1')||'null'); if(!f) return; const st=f.steps.find(x=>x.id===id); if(!st)return; st.status=sel.value; localStorage.setItem('FLOW_V1', JSON.stringify(f)); });
       });
-      $('#saveNotes').onclick = ()=>{
-        const f = store.flow; f.notes = $('#flowNotes').value; store.flow = f; alert('Saved.');
-      };
+      $('#saveNotes').onclick = ()=>{ const f=JSON.parse(localStorage.getItem('FLOW_V1')||'null'); if(!f) return; f.notes=$('#flowNotes').value; localStorage.setItem('FLOW_V1', JSON.stringify(f)); alert('Saved.'); };
       lucide.createIcons();
     }
-
     $('#makeFlow').onclick = async ()=>{
-      const text = $('#flowInput').value.trim();
-      if(!text) return;
-      try{ const f = await llmFlow(text); store.flow = f; renderFlow(f); }
-      catch(e){ alert(e.message); }
+      const text = $('#flowInput').value.trim(); if(!text) return;
+      try{ const f = await llmFlow(text); localStorage.setItem('FLOW_V1', JSON.stringify(f)); renderFlow(f); }
+      catch(e){ alert('Flows need an API key. Error: '+e.message); }
     };
-    $('#resetFlow').onclick = ()=>{ store.flow = null; renderFlow(null); };
+    $('#resetFlow').onclick = ()=>{ localStorage.removeItem('FLOW_V1'); renderFlow(null); };
 
-    // initial renders
-    renderPlan(store.plan && store.plan.day===store.planDay ? store.plan : null);
-    renderFlow(store.flow);
+    // ---------- Initial render ----------
+    (function init(){
+      renderChat();
+      renderPlanFor(store.planDay);
+      const savedFlow = JSON.parse(localStorage.getItem('FLOW_V1')||'null'); renderFlow(savedFlow);
+      // Default example (helps first run)
+      if(!getPlan(store.planDay)){
+        $('#planInput').value = 'Tomorrow breakfast with Kobe 9:00–9:50 at De Neve.\nPhysics 9–11 in Boelter 3400.\nLunch with Maya at 1pm for 45m.\nCut nails (10m)\nMeditate (20m)\nSleep by 11pm';
+      }
+    })();
 
-    /*************
-     * Utilities *
-     *************/
+    // ---------- Utils ----------
     function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m])); }
   </script>
 </body>
 </html>
-
-
