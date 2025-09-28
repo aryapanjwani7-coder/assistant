@@ -15,7 +15,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
   <script>dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);</script>
-  <!-- Chrono (local parsing) -->
+  <!-- Chrono (fallback parsing) -->
   <script src="https://cdn.jsdelivr.net/npm/chrono-node/dist/chrono.min.js"></script>
   <!-- ICS -->
   <script src="https://cdn.jsdelivr.net/npm/ics/dist/ics.min.js"></script>
@@ -42,11 +42,11 @@
         <div class="rounded-xl p-2 bg-white shadow-sm"><i data-lucide="bot" class="w-6 h-6 text-indigo-600"></i></div>
         <div>
           <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Unified AI Assistant (MVP)</h1>
-          <p class="text-sm text-slate-500">Chat • Plan • Flows — all in one lightweight page</p>
+          <p class="text-sm text-slate-500">Chat • Plan • Flows — AI-first scheduling</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <input id="apiKey" type="password" placeholder="(Optional) OpenAI API Key (sk-...)" class="w-72 card !py-2" />
+        <input id="apiKey" type="password" placeholder="OpenAI API Key (sk-...)" class="w-72 card !py-2" />
         <button id="saveKey" class="btn btn-primary flex items-center gap-2"><i data-lucide="save"></i>Save</button>
         <button id="clearKey" class="btn btn-ghost flex items-center gap-2"><i data-lucide="eraser"></i>Clear</button>
       </div>
@@ -85,22 +85,17 @@
       </div>
 
       <div class="text-sm text-slate-700">
-        <div class="font-semibold mb-1">Examples (one per line works best):</div>
+        <div class="font-semibold mb-1">Type naturally — AI will interpret it:</div>
         <ul class="list-disc pl-5 space-y-1">
-          <li>Tomorrow breakfast with Kobe 9:00–9:50 at De Neve.</li>
-          <li>Physics 9–11 in Boelter 3400.</li>
-          <li>Lunch with Maya at 1pm for 45m.</li>
-          <li>Dinner with Arjun 7–8pm in Westwood.</li>
-          <li>Cut nails (10m)</li>
-          <li>Meditate (20m)</li>
-          <li>Sleep by 11pm</li>
+          <li>tomorrow I'll have breakfast from 9-9:50am with Kobe at De Neve</li>
+          <li>physics 9–11 in Boelter 3400; lunch w/ Maya ~1 for 45m; meditate; cut nails (10m); sleep by 11</li>
         </ul>
       </div>
 
-      <textarea id="planInput" class="w-full card" rows="5" placeholder="Type your day here..."></textarea>
+      <textarea id="planInput" class="w-full card" rows="5" placeholder="Describe your day, even messily…"></textarea>
 
       <div class="flex flex-wrap gap-2 items-center">
-        <button id="makePlan" class="btn btn-primary flex items-center gap-2"><i data-lucide="wand-2"></i>Make / Update Plan</button>
+        <button id="makePlan" class="btn btn-primary flex items-center gap-2"><i data-lucide="sparkles"></i>Make / Update Plan</button>
         <button id="resetPlan" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset Day</button>
         <div class="flex items-center gap-2 ml-auto">
           <button id="prevDay" class="btn btn-ghost" title="Previous Day"><i data-lucide="chevron-left"></i></button>
@@ -126,7 +121,7 @@
       </div>
 
       <p class="text-xs text-slate-500">
-        Fixed items keep their exact times. Flexible tasks (like “cut nails”, “meditate 20m”) are automatically placed into free gaps between 06:30 and 24:00.
+        Fixed items keep their exact times. Flexible tasks are auto-placed into free gaps between 06:30 and 24:00.
       </p>
     </section>
 
@@ -153,7 +148,7 @@
     const $ = (s)=>document.querySelector(s);
     const $$ = (s)=>document.querySelectorAll(s);
 
-    // ---------- Persistent store (per-day plans) ----------
+    // ---------- Persistent store ----------
     const store = {
       get key(){ return localStorage.getItem('OPENAI_KEY') || ''; },
       set key(v){ localStorage.setItem('OPENAI_KEY', v); },
@@ -170,11 +165,7 @@
     };
 
     function getPlan(day){ return store.plans[day] || null; }
-    function setPlan(day, plan){
-      const all = store.plans;
-      all[day] = plan;
-      store.plans = all;
-    }
+    function setPlan(day, plan){ const all = store.plans; all[day] = plan; store.plans = all; }
 
     // ---------- Tabs ----------
     const tabs = $$('.tab');
@@ -198,15 +189,16 @@
     // ---------- Notifications ----------
     $('#notifyPerm').onclick = async ()=>{ const s = await Notification.requestPermission(); alert('Notification permission: ' + s); };
 
-    // ---------- OpenAI helper (optional; used only when present) ----------
+    // ---------- OpenAI helper ----------
     const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
     async function askOpenAI(messages, {model='gpt-4o-mini', temperature=0.2, json=false} = {}){
       const key = store.key;
-      if(!key) throw new Error('No OpenAI key found.');
+      if(!key) throw new Error('Missing OpenAI API key. Click Save at the top.');
       const body = { model, temperature, messages };
       if(json) body.response_format = { type: 'json_object' };
       const res = await fetch(OPENAI_URL, {
-        method: 'POST', headers: {'Content-Type':'application/json','Authorization':'Bearer '+key},
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
         body: JSON.stringify(body)
       });
       if(!res.ok){ throw new Error(await res.text()); }
@@ -240,11 +232,25 @@
 
     function emptyPlan(dayIso){ return { day: dayIso, items: [] }; }
 
-    // Local fallback parser: turns plain sentences into items (no LLM needed)
-    function localDraft(text, baseDayIso){
-      const lines = text.split(/\n+|[.;]\s+/).map(s=>s.trim()).filter(Boolean);
+    // Normalize time ranges like "9-9:50am" → "9am to 9:50am"
+    function normalizeTimeRange(line) {
+      let s = line;
+      s = s.replace(/from\s*(\d{1,2}(?::\d{2})?)\s*[-–]\s*(\d{1,2}(?::\d{2})?)\s*(am|pm)\b/i,
+                    (m, t1, t2, ap) => `from ${t1}${ap} to ${t2}${ap}`);
+      s = s.replace(/(\d{1,2}(?::\d{2})?)\s*[-–]\s*(\d{1,2}(?::\d{2})?)\s*(am|pm)\b/i,
+                    (m, t1, t2, ap) => `${t1}${ap} to ${t2}${ap}`);
+      s = s.replace(/from\s*(\d{1,2}(?::\d{2})?)\s*(?:to|–|-)\s*(\d{1,2}(?::\d{2})?)\s*(am|pm)\b/i,
+                    (m, t1, t2, ap) => `from ${t1}${ap} to ${t2}${ap}`);
+      s = s.replace(/(\d{1,2}(?::\d{2})?)\s*(?:to|–|-)\s*(\d{1,2}(?::\d{2})?)\s*(am|pm)\b/i,
+                    (m, t1, t2, ap) => `${t1}${ap} to ${t2}${ap}`);
+      return s;
+    }
+
+    // Local fallback parser (used only if OpenAI fails)
+    function localDraft(text){
+      const lines = text.split(/\n+|[.;]\s+/).map(s=>normalizeTimeRange(s.trim())).filter(Boolean);
       const items = [];
-      const defaultDurByKeyword = (title)=>{
+      const defaultDur = (title)=>{
         const t = title.toLowerCase();
         if(t.includes('breakfast')) return 30;
         if(t.includes('lunch')) return 45;
@@ -253,64 +259,44 @@
         if(t.includes('nail')) return 10;
         return 30;
       };
-      for(const line of lines){
-        const parsed = chrono.parse(line, new Date());
-        // Extract explicit duration like "1h15m" or "45m" or "(20m)"
+      for(const raw of lines){
+        const line = raw;
         const durMatch = line.match(/(\d+)\s*h(?:\s*(\d+)\s*m)?|(\d+)\s*m/i);
         const durMin = durMatch ? (durMatch[3] ? parseInt(durMatch[3]) : (parseInt(durMatch[1]||0)*60 + parseInt(durMatch[2]||0))) : null;
 
-        const baseTitle = line
-          .replace(/\b(tomorrow|today|at|from|until|till|to)\b/gi,'')
-          .replace(/\d{1,2}\s*[:.]?\d{0,2}\s*(am|pm)?/gi,'')
-          .replace(/\b(\d+)\s*h(\s*\d+\s*m)?\b/gi,'')
-          .replace(/\b(\d+)\s*m\b/gi,'')
-          .replace(/\s{2,}/g,' ')
-          .trim()
-          .replace(/^[-–—,:]+/,'')
-          .trim();
-
-        function titleWithWith(){
-          // keep "with X" if present
-          const m = line.match(/(.+?)(with\s+[^,.;]+)(.*)/i);
+        function titleWithCompanion(){
+          const m = line.match(/(.+?)(\swith\s+[^,.;]+)(.*)$/i);
+          const strip = (txt)=>txt.replace(/\b(tomorrow|today|at|from|until|till|to|around|about|ish)\b/gi,'')
+                                  .replace(/\d{1,2}\s*[:.]?\d{0,2}\s*(am|pm)?/gi,'')
+                                  .replace(/\b(\d+)\s*h(\s*\d+\s*m)?\b/gi,'')
+                                  .replace(/\b(\d+)\s*m\b/gi,'')
+                                  .replace(/\s{2,}/g,' ').trim().replace(/^[-–—,:]+/,'').trim();
           if(m){
-            const left = m[1].replace(/\d.*$/,'').trim();
-            return (left ? left + ' ' : '') + m[2].trim();
+            const left = strip(m[1]); const base = left || 'Task';
+            return `${base} ${m[2].trim()}`.trim();
           }
-          return baseTitle || 'Task';
+          return strip(line) || 'Task';
         }
+        const parsed = chrono.parse(line, new Date());
 
-        if(parsed.length){
-          // If two endpoints (9 to 9:50), make fixed
-          if(parsed[0].start && parsed[0].end){
-            const s = parsed[0].start.date(); const e = parsed[0].end.date();
-            const start = dayjs(s).format('HH:mm'); const end = dayjs(e).format('HH:mm');
-            items.push({ title: titleWithWith(), type:'fixed', start, end, duration_min: dayjs(e).diff(dayjs(s),'minute'), notes:'' });
-            continue;
-          }
-          // One time -> build using duration if any
-          if(parsed[0].start){
-            const s = parsed[0].start.date();
-            const start = dayjs(s).format('HH:mm');
-            if(durMin){
-              const end = dayjs(s).add(durMin,'minute').format('HH:mm');
-              items.push({ title: titleWithWith(), type:'fixed', start, end, duration_min: durMin, notes:'' });
-            }else{
-              // treat as fixed with default duration by keyword
-              const d = defaultDurByKeyword(baseTitle);
-              const end = dayjs(s).add(d,'minute').format('HH:mm');
-              items.push({ title: titleWithWith(), type:'fixed', start, end, duration_min: d, notes:'' });
-            }
-            continue;
-          }
+        if(parsed.length && parsed[0].start && parsed[0].end){
+          const s = parsed[0].start.date(), e = parsed[0].end.date();
+          items.push({ title:titleWithCompanion(), type:'fixed',
+            start:dayjs(s).format('HH:mm'), end:dayjs(e).format('HH:mm'),
+            duration_min: dayjs(e).diff(dayjs(s),'minute'), notes:'' });
+          continue;
         }
-        // No explicit time -> flexible
-        const d = durMin || defaultDurByKeyword(baseTitle);
-        // detect meals
-        const tt = baseTitle.toLowerCase();
-        const type = (tt.includes('breakfast')||tt.includes('lunch')||tt.includes('dinner')) ? 'meal' : 'flexible';
-        items.push({ title: titleWithWith(), type, start:'', end:'', duration_min: d, notes:'' });
+        if(parsed.length && parsed[0].start){
+          const s = parsed[0].start.date(); const d = durMin || defaultDur(line);
+          items.push({ title:titleWithCompanion(), type:'fixed',
+            start:dayjs(s).format('HH:mm'), end:dayjs(s).add(d,'minute').format('HH:mm'),
+            duration_min:d, notes:'' });
+          continue;
+        }
+        const d = durMin || defaultDur(line);
+        const isMeal = /\b(breakfast|lunch|dinner)\b/i.test(line);
+        items.push({ title:titleWithCompanion(), type: isMeal ? 'meal' : 'flexible', start:'', end:'', duration_min:d, notes:'' });
       }
-      // Sleep by X
       const sleepM = text.match(/sleep\s+by\s+([0-9:.\sapm]+)/i);
       if(sleepM){
         const tParsed = chrono.parse('at '+sleepM[1], new Date());
@@ -322,17 +308,70 @@
       return { items };
     }
 
-    // Optional: LLM structuring (if key supplied). Falls back to localDraft on any error.
-    async function llmPlanDraft(text, baseDayIso){
-      const sys = `Convert a daily description into STRICT JSON: {"items":[
-{ "title": string, "type":"fixed"|"flexible"|"meal"|"rest", "duration_min": number, "start": "HH:mm"|"", "end":"HH:mm"|"" , "notes": string }
-]}. Rules: fixed needs start+end; meals default 30/45/45; preserve "with <name>" in title; assume date ${baseDayIso}. Return ONLY JSON.`;
-      const user = `Text: """${text}"""`;
-      const out = await askOpenAI([{role:'system', content:sys},{role:'user', content:user}], {temperature:0.1, json:true});
-      try { return JSON.parse(out); } catch(e){ throw new Error('bad json'); }
+    // AI-first structuring: robust, with guardrails + examples
+    async function aiDraft(text, baseDayIso){
+      const sys = `
+You are a scheduling parser. Convert messy natural text into STRICT JSON with this schema:
+
+{
+  "day": "YYYY-MM-DD",
+  "items": [
+    {
+      "title": "Breakfast with Kobe",
+      "type": "fixed" | "flexible" | "meal" | "rest",
+      "start": "HH:mm",    // required for fixed/rest with explicit times
+      "end":   "HH:mm",    // required for fixed/rest with explicit times
+      "duration_min": 0,   // for flexible/meal, or when time not explicit
+      "notes": ""
+    }
+  ]
+}
+
+Rules:
+- Assume the target date is ${baseDayIso} unless user states another date.
+- Understand sloppy times: "9-9:50am" = "9:00" to "9:50". Fill missing am/pm from context.
+- Detect ranges like "9–11", "from 7 to 7:30", "~1" (≈1:00) -> interpret reasonably.
+- Preserve companions/locations in title or notes: "with Kobe", "at De Neve".
+- Meals default durations if no time given: breakfast 30m, lunch 45m, dinner 45m (type "meal").
+- "Sleep by 11" -> a "rest" item ending at 23:00. If "sleep 23:30–07:00" make fixed/rest with both times.
+- Chores with durations but no time -> "flexible" with duration_min.
+- The output MUST be valid JSON. No extra commentary.
+
+Return ONLY JSON.`;
+
+      const fewshotUser = `Examples of input:
+- "tomorrow I'll have breakfast from 9-9:50am with Kobe at De Neve"
+- "physics 9–11 in Boelter 3400; lunch with Maya ~1 for 45m; meditate; cut nails (10m); sleep by 11"
+- "gym after class for 1h"`;
+
+      const fewshotAssistant = JSON.stringify({
+        day: baseDayIso,
+        items: [
+          { title: "Breakfast with Kobe", type: "meal", start: "09:00", end: "09:50", duration_min: 50, notes: "De Neve" },
+          { title: "Physics (Boelter 3400)", type: "fixed", start: "09:00", end: "11:00", duration_min: 120, notes: "" },
+          { title: "Lunch with Maya", type: "meal", start: "13:00", end: "13:45", duration_min: 45, notes: "" },
+          { title: "Meditate", type: "flexible", start: "", end: "", duration_min: 20, notes: "" },
+          { title: "Cut nails", type: "flexible", start: "", end: "", duration_min: 10, notes: "" },
+          { title: "Sleep", type: "rest", start: "", end: "23:00", duration_min: 0, notes: "" }
+        ]
+      });
+
+      const user = `User text:\n"""${text}"""`;
+
+      // primary attempt
+      const out = await askOpenAI(
+        [
+          { role:'system', content: sys },
+          { role:'user', content: fewshotUser },
+          { role:'assistant', content: fewshotAssistant },
+          { role:'user', content: user }
+        ],
+        { temperature: 0.1, json: true }
+      );
+      return JSON.parse(out);
     }
 
-    // Allocate flexible around fixed between 06:30 and 24:00
+    // Allocation: place flexible items in gaps 06:30 → 24:00, keep fixed times
     function allocatePlan(baseDayIso, draft){
       const startOfDay = dayjs(baseDayIso + 'T06:30');
       const endOfDay   = dayjs(baseDayIso + 'T24:00');
@@ -341,12 +380,9 @@
       const fixed = [], flex = [];
       for(const raw of (draft.items||[])){
         const it = {...raw};
-        if(it.type==='fixed' && it.start && it.end){
-          fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
-        }else if(it.type==='rest' && it.start && it.end){
+        if((it.type==='fixed' || it.type==='rest') && it.start && it.end){
           fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
         }else{
-          // normalize meals
           let d = Number(it.duration_min)||0;
           if(it.type==='meal' && !d){
             const t = (it.title||'').toLowerCase();
@@ -393,13 +429,15 @@
     }
 
     function detectBaseDay(text){
+      // Prefer explicit words
+      if(/tomorrow/i.test(text)) return dayjs().add(1,'day').format('YYYY-MM-DD');
+      if(/today/i.test(text)) return dayjs().format('YYYY-MM-DD');
+      // Fallback to chrono (first mention)
       const p = chrono.parse(text, new Date());
       if(p?.length){
         const d = p[0].start?.date();
         if(d) return dayjs(d).format('YYYY-MM-DD');
       }
-      if(/tomorrow/i.test(text)) return dayjs().add(1,'day').format('YYYY-MM-DD');
-      if(/today/i.test(text)) return dayjs().format('YYYY-MM-DD');
       return store.planDay || dayjs().format('YYYY-MM-DD');
     }
 
@@ -498,36 +536,42 @@
       return '#f59e0b';
     }
 
-    // Make / Update plan
+    // Make / Update plan (AI-first)
     $('#makePlan').onclick = async ()=>{
-      const text = $('#planInput').value.trim();
-      const baseDay = detectBaseDay(text);
+      const raw = $('#planInput').value.trim();
+      if(!raw) return;
+      const baseDay = detectBaseDay(raw);
       store.planDay = baseDay;
 
-      // 1) Try LLM if key present, otherwise local
-      let draft;
-      if(store.key){
-        try{ draft = await llmPlanDraft(text, baseDay); } catch { draft = localDraft(text, baseDay); }
-      } else {
-        draft = localDraft(text, baseDay);
-      }
+      try{
+        // 1) AI structuring (primary)
+        const ai = await aiDraft(raw, baseDay);
 
-      // 2) If same day had plan, keep user-fixed items and reflow the rest
-      const prior = getPlan(baseDay);
-      let toAllocate = draft;
-      if(prior){
-        const locked = prior.items.filter(it=>it.start && it.end);
-        toAllocate = { items: [
-          ...locked.map(it=>({title:it.title, type:it.type, start:it.start, end:it.end, duration_min:it.duration_min, notes:it.notes||''})),
-          ...draft.items
-        ] };
-      }
+        // 2) Merge with prior fixed edits (lock times)
+        const prior = getPlan(baseDay);
+        let toAllocate = ai;
+        if(prior){
+          const locked = prior.items.filter(it=>it.start && it.end);
+          toAllocate = { day: baseDay, items: [
+            ...locked.map(it=>({title:it.title, type:it.type, start:it.start, end:it.end, duration_min:it.duration_min||0, notes:it.notes||''})),
+            ...ai.items
+          ]};
+        }
 
-      // 3) Allocate and save
-      const finalPlan = allocatePlan(baseDay, toAllocate);
-      setPlan(baseDay, finalPlan);
-      renderPlanFor(baseDay);
-      scheduleLocalNotifications(finalPlan);
+        // 3) Allocate + save
+        const finalPlan = allocatePlan(baseDay, toAllocate);
+        setPlan(baseDay, finalPlan);
+        renderPlanFor(baseDay);
+        scheduleLocalNotifications(finalPlan);
+
+      }catch(err){
+        // fallback to local
+        console.warn('AI parse failed, using local draft:', err);
+        const draft = localDraft(raw);
+        const finalPlan = allocatePlan(baseDay, draft);
+        setPlan(baseDay, finalPlan);
+        renderPlanFor(baseDay);
+      }
     };
 
     $('#resetPlan').onclick = ()=>{
@@ -550,7 +594,7 @@
       for(const it of p.items){
         if(!it.start || !it.end) continue;
         const start = dayjs(day+'T'+it.start); const end = dayjs(day+'T'+it.end);
-        cal.addEvent(it.title, it.notes||'', '', 
+        cal.addEvent(it.title, it.notes||'', '',
           [start.year(), start.month()+1, start.date(), start.hour(), start.minute()],
           [end.year(), end.month()+1, end.date(), end.hour(), end.minute()],
           { reminders: [{method:'display', minutes:10}] }
@@ -574,7 +618,6 @@
 
     // ---------- Flows ----------
     async function llmFlow(text){
-      if(!store.key) throw new Error('Add API key to use Flows.');
       const sys = `Return STRICT JSON: {"title":string,"steps":[{"id":1,"title":string,"detail":string,"status":"todo"|"doing"|"done"}...],"notes":string}`;
       const out = await askOpenAI([{role:'system', content:sys},{role:'user', content:text}], {temperature:0.2, json:true});
       return JSON.parse(out);
@@ -612,7 +655,7 @@
     $('#makeFlow').onclick = async ()=>{
       const text = $('#flowInput').value.trim(); if(!text) return;
       try{ const f = await llmFlow(text); localStorage.setItem('FLOW_V1', JSON.stringify(f)); renderFlow(f); }
-      catch(e){ alert('Flows need an API key. Error: '+e.message); }
+      catch(e){ alert('Flows need a valid OpenAI key. Error: '+e.message); }
     };
     $('#resetFlow').onclick = ()=>{ localStorage.removeItem('FLOW_V1'); renderFlow(null); };
 
@@ -621,10 +664,6 @@
       renderChat();
       renderPlanFor(store.planDay);
       const savedFlow = JSON.parse(localStorage.getItem('FLOW_V1')||'null'); renderFlow(savedFlow);
-      // Default example (helps first run)
-      if(!getPlan(store.planDay)){
-        $('#planInput').value = 'Tomorrow breakfast with Kobe 9:00–9:50 at De Neve.\nPhysics 9–11 in Boelter 3400.\nLunch with Maya at 1pm for 45m.\nCut nails (10m)\nMeditate (20m)\nSleep by 11pm';
-      }
     })();
 
     // ---------- Utils ----------
