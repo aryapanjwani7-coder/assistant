@@ -4,115 +4,166 @@
   <meta charset="UTF-8" />
   <title>Your Unified AI Assistant (MVP)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Tailwind via CDN (no build step) -->
+
+  <!-- Fonts + Tailwind (CDN, zero build) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Day.js for dates -->
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Day.js + tz -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
   <script>dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);</script>
+
   <!-- Chrono for natural-language time parsing -->
   <script src="https://cdn.jsdelivr.net/npm/chrono-node/dist/chrono.min.js"></script>
+
   <!-- ICS file generator -->
   <script src="https://cdn.jsdelivr.net/npm/ics/dist/ics.min.js"></script>
+
   <style>
+    :root {
+      --card-bg: rgba(255,255,255,0.9);
+    }
     html, body { height: 100%; }
-    .card { @apply bg-white rounded-2xl shadow p-4; }
-    .btn { @apply rounded-xl px-4 py-2 font-medium shadow; }
-    .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
-    .btn-secondary { @apply bg-gray-100 hover:bg-gray-200; }
-    .pill { @apply text-xs px-2 py-0.5 rounded-full bg-gray-100; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; }
+    .card { background: var(--card-bg); border-radius: 1rem; box-shadow: 0 10px 30px rgba(2,6,23,0.06); padding: 1rem; }
+    .btn { border-radius: 0.75rem; padding: 0.6rem 0.9rem; font-weight: 600; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1e40af; }
+    .btn-ghost { background: transparent; border: 1px solid rgba(0,0,0,0.08); }
+    .btn-ghost:hover { background: rgba(0,0,0,0.04); }
+    .glass { backdrop-filter: blur(8px); }
+    .mono { font-family: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+
+    /* Timeline */
+    .timeline-grid-line { position:absolute; left:0; right:0; border-top:1px dashed rgba(0,0,0,0.08); }
+    .timeline-label { position:absolute; left:0; transform: translateY(-50%); font-size: 12px; color: #6b7280; }
+    .timeline-block { position:absolute; left:60px; right:8px; border-radius: 10px; color:white; padding:8px; font-size:12px; box-shadow: 0 8px 16px rgba(0,0,0,0.08); }
+    .timeline-now { position:absolute; left:0; right:0; height:2px; background:#ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,0.15); }
   </style>
 </head>
-<body class="min-h-screen bg-gray-50 text-gray-900">
+<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-emerald-50">
+
   <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-    <header class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-      <h1 class="text-2xl md:text-3xl font-bold">Unified AI Assistant (MVP)</h1>
+    <!-- Header -->
+    <header class="glass card flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="rounded-xl p-2 bg-white shadow-sm">
+          <i data-lucide="bot" class="w-6 h-6 text-indigo-600"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Unified AI Assistant (MVP)</h1>
+          <p class="text-sm text-slate-500">Chat • Plan • Flows — all in one lightweight page</p>
+        </div>
+      </div>
       <div class="flex items-center gap-2">
         <input id="apiKey" type="password" placeholder="OpenAI API Key (sk-...)" class="w-72 card !py-2" />
-        <button id="saveKey" class="btn btn-primary">Save</button>
-        <button id="clearKey" class="btn btn-secondary">Clear</button>
+        <button id="saveKey" class="btn btn-primary flex items-center gap-2"><i data-lucide="save"></i>Save</button>
+        <button id="clearKey" class="btn btn-ghost flex items-center gap-2"><i data-lucide="eraser"></i>Clear</button>
       </div>
     </header>
 
     <!-- Tabs -->
-    <nav class="flex gap-2">
-      <button data-tab="chat" class="tab btn btn-secondary">Chat</button>
-      <button data-tab="plan" class="tab btn btn-secondary">Plan My Day</button>
-      <button data-tab="flows" class="tab btn btn-secondary">Task Flows</button>
+    <nav class="glass card flex gap-2">
+      <button data-tab="chat"  class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="message-circle"></i>Chat</button>
+      <button data-tab="plan"  class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="calendar"></i>Plan My Day</button>
+      <button data-tab="flows" class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="list-todo"></i>Task Flows</button>
     </nav>
 
     <!-- Chat -->
-    <section id="chat" class="card space-y-3 hidden">
+    <section id="chat" class="glass card space-y-3 hidden">
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-semibold">General Knowledge & Conversation</h2>
-        <span class="pill">Model: gpt-4o-mini (configurable)</span>
+        <span class="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700">Model: gpt-4o-mini</span>
       </div>
-      <div id="chatLog" class="bg-gray-50 rounded-xl p-3 h-72 overflow-auto text-sm space-y-3"></div>
+      <div id="chatLog" class="bg-white/70 rounded-xl p-3 h-80 overflow-auto text-sm space-y-3 border border-slate-100"></div>
       <div class="flex gap-2">
         <textarea id="chatInput" class="flex-1 card" rows="2" placeholder="Ask anything..."></textarea>
-        <button id="sendChat" class="btn btn-primary">Send</button>
+        <button id="sendChat" class="btn btn-primary flex items-center gap-2"><i data-lucide="send"></i>Send</button>
       </div>
     </section>
 
     <!-- Plan -->
-    <section id="plan" class="card space-y-4 hidden">
+    <section id="plan" class="glass card space-y-4 hidden">
       <div class="flex items-center justify-between">
-        <h2 class="text-xl font-semibold">Smart Scheduling & Daily Planning</h2>
+        <div class="flex items-center gap-2">
+          <h2 class="text-xl font-semibold">Smart Scheduling & Daily Planning</h2>
+          <span id="planDayBadge" class="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700"></span>
+        </div>
         <div class="flex gap-2">
-          <button id="notifyPerm" class="btn btn-secondary">Enable Notifications</button>
-          <button id="exportICS" class="btn btn-secondary">Export .ics</button>
+          <button id="notifyPerm" class="btn btn-ghost flex items-center gap-2"><i data-lucide="bell"></i>Enable Notifications</button>
+          <button id="exportICS" class="btn btn-ghost flex items-center gap-2"><i data-lucide="download"></i>Export .ics</button>
         </div>
       </div>
-      <p class="text-sm text-gray-600">
-        Describe your day in plain English (example: “I live in Dykstra. Tomorrow I have physics 9–11am in Boelter, then CS 2–3pm. I need breakfast, lunch, dinner, laundry (1h15m). Sleep by 11pm. Plan my day.”)
-      </p>
+
+      <div class="text-sm text-slate-600">
+        Describe your day (example: “I live in Dykstra. Tomorrow physics 9–11am in Boelter, then CS 2–3pm. Need breakfast, lunch, dinner, laundry 1h15m. Sleep by 11pm. Plan my day.”)
+      </div>
+
       <textarea id="planInput" class="w-full card" rows="4" placeholder="Type your day here..."></textarea>
-      <div class="flex gap-2">
-        <button id="makePlan" class="btn btn-primary">Make / Update Plan</button>
-        <button id="resetPlan" class="btn btn-secondary">Reset</button>
-      </div>
-      <div class="grid md:grid-cols-2 gap-4">
-        <div class="space-y-2">
-          <h3 class="font-semibold">Structured Plan (editable)</h3>
-          <div id="planTable" class="bg-gray-50 rounded-xl p-3 text-sm"></div>
+
+      <div class="flex flex-wrap gap-2">
+        <button id="makePlan" class="btn btn-primary flex items-center gap-2"><i data-lucide="wand-2"></i>Make / Update Plan</button>
+        <button id="resetPlan" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset</button>
+        <div class="flex items-center gap-2 ml-auto">
+          <button id="prevDay" class="btn btn-ghost"><i data-lucide="chevron-left"></i></button>
+          <div id="currentDayLabel" class="text-sm font-semibold"></div>
+          <button id="nextDay" class="btn btn-ghost"><i data-lucide="chevron-right"></i></button>
         </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-4">
+        <!-- Left: Timeline -->
         <div class="space-y-2">
-          <h3 class="font-semibold">Visual Timeline (today)</h3>
-          <div class="bg-white rounded-xl border p-3">
-            <div id="timeline" class="relative h-96 overflow-hidden">
-              <!-- timeline grid & blocks injected here -->
-            </div>
+          <h3 class="font-semibold flex items-center gap-2"><i data-lucide="clock-8"></i>Timeline</h3>
+          <div class="bg-white rounded-xl border border-slate-100 p-3">
+            <div id="timeline" class="relative h-[520px] overflow-hidden"></div>
           </div>
         </div>
+
+        <!-- Right: Structured Plan -->
+        <div class="space-y-2">
+          <h3 class="font-semibold flex items-center gap-2"><i data-lucide="table"></i>Structured Plan (editable)</h3>
+          <div id="planTable" class="bg-white rounded-xl p-3 text-sm border border-slate-100"></div>
+        </div>
       </div>
-      <p class="text-xs text-gray-500">
-        Tip: After the first plan, you can just add updates like “class cancelled 2–3pm” or “add gym 45m” and click “Make / Update Plan”.
+
+      <p class="text-xs text-slate-500">
+        Tip: After the first plan, you can add updates like “class cancelled 2–3pm” or “add gym 45m” and click “Make / Update Plan”.
       </p>
     </section>
 
     <!-- Flows -->
-    <section id="flows" class="card space-y-4 hidden">
+    <section id="flows" class="glass card space-y-4 hidden">
       <h2 class="text-xl font-semibold">Task-Flow Assistant</h2>
-      <p class="text-sm text-gray-600">
-        Example: “Book a round trip to India from LAX, Dec 15–Jan 5. Budget \$1500. Prefer non-stop if possible.”  
-        The assistant breaks it into steps (flights → hotels → sightseeing), and you can tick them off.
+      <p class="text-sm text-slate-600">
+        Example: “Book a round trip to India from LAX, Dec 15–Jan 5. Budget $1500. Prefer non-stop if possible.”
       </p>
       <textarea id="flowInput" class="w-full card" rows="3" placeholder="Describe your goal..."></textarea>
       <div class="flex gap-2">
-        <button id="makeFlow" class="btn btn-primary">Create / Update Flow</button>
-        <button id="resetFlow" class="btn btn-secondary">Reset Flow</button>
+        <button id="makeFlow" class="btn btn-primary flex items-center gap-2"><i data-lucide="waypoints"></i>Create / Update Flow</button>
+        <button id="resetFlow" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset Flow</button>
       </div>
       <div id="flowSteps" class="space-y-2"></div>
     </section>
 
-    <footer class="text-xs text-gray-500 text-center py-4">
+    <footer class="text-xs text-slate-500 text-center py-4">
       MVP for personal use. No backend. Data saved in your browser. Export calendars to .ics for phone/Google/Apple Calendar.
     </footer>
   </div>
 
   <script>
+    /**********************
+     * Init icons
+     **********************/
+    window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); });
+
     /**********************
      * Simple state/store *
      **********************/
@@ -131,6 +182,9 @@
 
       get flow(){ return JSON.parse(localStorage.getItem('FLOW_V1') || 'null'); },
       set flow(v){ localStorage.setItem('FLOW_V1', JSON.stringify(v)); },
+
+      get planDay(){ return localStorage.getItem('PLAN_DAY') || dayjs().format('YYYY-MM-DD'); },
+      set planDay(v){ localStorage.setItem('PLAN_DAY', v); },
     };
 
     // Tabs
@@ -142,6 +196,7 @@
         $('#'+btn.dataset.tab).classList.remove('hidden');
         tabs.forEach(b=>b.classList.remove('bg-blue-600','text-white'));
         btn.classList.add('bg-blue-600','text-white');
+        lucide.createIcons();
       });
     });
     // Default to chat
@@ -162,20 +217,17 @@
      * OpenAI helper *
      *****************/
     const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-    async function askOpenAI(messages, {model='gpt-4o-mini', temperature=0.2} = {}){
+
+    // JSON-mode aware call
+    async function askOpenAI(messages, {model='gpt-4o-mini', temperature=0.2, json=false} = {}){
       const key = store.key;
       if(!key){ throw new Error('Missing OpenAI API key. Add it at the top.'); }
+      const body = { model, temperature, messages };
+      if(json){ body.response_format = { type: 'json_object' }; }
       const res = await fetch(OPENAI_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + key
-        },
-        body: JSON.stringify({
-          model,
-          temperature,
-          messages
-        })
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify(body)
       });
       if(!res.ok){
         const t = await res.text();
@@ -192,9 +244,10 @@
       const log = $('#chatLog');
       log.innerHTML = '';
       for(const m of store.chatHistory){
+        const me = m.role==='user';
         const bubble = document.createElement('div');
-        bubble.className = 'p-2 rounded-lg ' + (m.role==='user' ? 'bg-blue-50' : 'bg-white border');
-        bubble.innerHTML = '<div class="text-xs text-gray-500">'+(m.role==='user'?'You':'Assistant')+'</div><div class="whitespace-pre-wrap">'+m.content+'</div>';
+        bubble.className = 'p-3 rounded-xl border ' + (me ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100');
+        bubble.innerHTML = '<div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">'+(me?'You':'Assistant')+'</div><div class="whitespace-pre-wrap">'+escapeHtml(m.content)+'</div>';
         log.appendChild(bubble);
       }
       log.scrollTop = log.scrollHeight;
@@ -218,99 +271,78 @@
         hist.push({role:'assistant', content:answer});
         store.chatHistory = hist;
         renderChat();
-      }catch(e){
-        alert(e.message);
-      }
+      }catch(e){ alert(e.message); }
     };
 
     /***********************
      * Planner / Scheduler *
      ***********************/
     function emptyPlan(dayIso){
-      return {
-        day: dayIso, // e.g., 2025-09-26
-        items: [] // {id, title, start, end, type: 'fixed'|'flexible'|'meal'|'rest', notes}
-      };
+      return { day: dayIso, items: [] };
     }
 
-    // Parse free text to draft plan using LLM (strict JSON)
+    // Strict JSON draft via LLM
     async function llmPlanDraft(text, baseDayIso){
-      const sys = `You convert a free-text daily plan into STRICT JSON with an array "items".
+      const sys = `You convert a free-text daily plan into STRICT JSON: {"items":[...]}.
 Rules:
-- DO NOT include explanations; return ONLY JSON.
-- For each detected commitment or task, output an object:
-  { "title": string, "type": "fixed"|"flexible"|"meal"|"rest", "duration_min": number (for flexible/meal/rest), "start": "HH:mm" or "", "end": "HH:mm" or "", "notes": string }
-- "fixed" must include start & end.
-- If user mentions sleep target, add type "rest" with duration_min or start/end if explicit.
-- Meals: breakfast/lunch/dinner as type "meal" with duration_min if not given (default 30 for breakfast, 45 for lunch, 45 for dinner).
-- Laundry or chores become type "flexible" with duration_min specified or inferred (e.g., "1h15m" -> 75).
-- If places/locations are mentioned, add a short "notes".
-Assume the date is ${baseDayIso}.`;
+- Return ONLY a JSON object.
+- Each item:
+  { "title": string,
+    "type": "fixed"|"flexible"|"meal"|"rest",
+    "duration_min": number (for non-fixed unless explicit times),
+    "start": "HH:mm" or "",
+    "end": "HH:mm" or "",
+    "notes": string }
+- "fixed" requires start & end.
+- If sleep target present, include a "rest" block (start/end or duration).
+- Meals default durations: breakfast 30, lunch 45, dinner 45 if not specified.
+- Infer durations like "1h15m" => 75.
+- Note locations if mentioned.
+- Assume date is ${baseDayIso}.`;
       const user = `Text: """${text}"""`;
-      const out = await askOpenAI([
-        {role:'system', content: sys},
-        {role:'user', content: user}
-      ], {temperature:0.1});
-      // Safe parse
+      const out = await askOpenAI(
+        [{role:'system', content: sys},{role:'user', content: user}],
+        {temperature:0.1, json:true}
+      );
       try { return JSON.parse(out); } catch(e){ throw new Error('Planner JSON parse error. Output was:\n' + out); }
     }
 
-    // Allocate flexible blocks around fixed ones within waking window
+    // Allocate flexible around fixed between 06:30 and 23:00
     function allocatePlan(baseDayIso, draft){
-      // 1) collect fixed and flex
-      const startOfDay = dayjs(baseDayIso + 'T06:30'); // default wake 6:30
-      const endOfDay   = dayjs(baseDayIso + 'T23:00'); // default sleep 23:00
-      const fixed = [];
-      const flex  = [];
+      const startOfDay = dayjs(baseDayIso + 'T06:30');
+      const endOfDay   = dayjs(baseDayIso + 'T24:00');
 
-      // helper to HH:mm -> dayjs
       const toTime = (hhmm)=>dayjs(baseDayIso + 'T' + hhmm.padStart(5,'0'));
-      for(const it of draft.items || []){
+      const fixed = [], flex = [];
+
+      for(const raw of (draft.items||[])){
+        const it = {...raw};
         if(it.type==='fixed' && it.start && it.end){
-          fixed.push({
-            ...it,
-            startDT: toTime(it.start),
-            endDT: toTime(it.end)
-          });
+          fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
         }else{
-          // normalize default meal durations
-          let d = it.duration_min || 0;
+          let d = Number(it.duration_min)||0;
           if(it.type==='meal' && !d){
             const t = (it.title||'').toLowerCase();
-            if(t.includes('breakfast')) d = 30;
-            else if(t.includes('lunch')) d = 45;
-            else if(t.includes('dinner')) d = 45;
-            else d = 30;
+            if(t.includes('breakfast')) d = 30; else if(t.includes('lunch')) d=45; else if(t.includes('dinner')) d=45; else d=30;
           }
-          if(it.type==='rest' && !d && it.start && it.end){
-            // rest already has bounds—treat as fixed
-            fixed.push({
-              ...it,
-              startDT: toTime(it.start),
-              endDT: toTime(it.end),
-              type:'rest'
-            });
-            continue;
+          if(it.type==='rest' && it.start && it.end){
+            fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
+          }else{
+            flex.push({...it, duration_min: d||30});
           }
-          flex.push({...it, duration_min: d || 30});
         }
       }
 
-      // 2) sort fixed by start
       fixed.sort((a,b)=>a.startDT - b.startDT);
 
-      // 3) available gaps between fixed items
       const gaps = [];
       let cursor = startOfDay;
       for(const f of fixed){
-        if(f.startDT.isAfter(cursor)){
-          gaps.push({start: cursor, end: f.startDT});
-        }
-        cursor = f.endDT.isAfter(cursor) ? f.endDT : cursor;
+        if(f.startDT.isAfter(cursor)) gaps.push({start: cursor, end: f.startDT});
+        if(f.endDT.isAfter(cursor)) cursor = f.endDT;
       }
       if(cursor.isBefore(endOfDay)) gaps.push({start: cursor, end: endOfDay});
 
-      // 4) place flex items greedily into gaps
       const placed = [...fixed];
       function placeOne(task){
         for(const g of gaps){
@@ -318,7 +350,6 @@ Assume the date is ${baseDayIso}.`;
           if(freeMin >= task.duration_min){
             task.startDT = g.start;
             task.endDT   = g.start.add(task.duration_min,'minute');
-            // move gap start
             g.start = task.endDT;
             placed.push(task);
             return true;
@@ -326,31 +357,45 @@ Assume the date is ${baseDayIso}.`;
         }
         return false;
       }
-      for(const t of flex){ placeOne(t); }
+      for(const t of flex) placeOne(t);
 
-      // 5) Normalize output list, assign ids
       let id=1;
       const items = placed.map(it=>{
         const start = it.startDT ? it.startDT.format('HH:mm') : (it.start||'');
         const end   = it.endDT ? it.endDT.format('HH:mm')   : (it.end||'');
-        return {
-          id: id++,
-          title: it.title || 'Task',
-          type: it.type || (start && end ? 'fixed' : 'flexible'),
-          start, end,
-          duration_min: it.duration_min || (start && end ? dayjs(baseDayIso+'T'+end).diff(dayjs(baseDayIso+'T'+start),'minute') : 0),
-          notes: it.notes || ''
-        };
+        const dur   = it.duration_min || (start && end ? dayjs(baseDayIso+'T'+end).diff(dayjs(baseDayIso+'T'+start),'minute') : 0);
+        return { id:id++, title: it.title||'Task', type: it.type|| (start&&end?'fixed':'flexible'), start, end, duration_min: dur, notes: it.notes||'' };
       }).sort((a,b)=>a.start.localeCompare(b.start));
       return { day: baseDayIso, items };
     }
 
-    // Render plan table + timeline
+    // Detect base day from text (chrono) or fallback to selected day
+    function detectBaseDay(text){
+      const ref = new Date();
+      const parsed = chrono.parse(text, ref);
+      if(parsed?.length){
+        const d = parsed[0].start?.date();
+        if(d) return dayjs(d).format('YYYY-MM-DD');
+      }
+      if(/tomorrow/i.test(text)) return dayjs().add(1,'day').format('YYYY-MM-DD');
+      if(/today/i.test(text)) return dayjs().format('YYYY-MM-DD');
+      return null;
+    }
+
+    // Renders
     function renderPlan(plan){
       const wrap = $('#planTable');
-      if(!plan){ wrap.innerHTML = '<div class="text-gray-500">No plan yet.</div>'; renderTimeline(null); return; }
-      const rows = plan.items.map(it=>{
-        return `<div class="grid grid-cols-12 items-center gap-2 py-1 border-b">
+      const badge = $('#planDayBadge');
+      const label = $('#currentDayLabel');
+
+      const day = store.planDay;
+      badge.textContent = 'Day: ' + day;
+      label.textContent = dayjs(day).format('ddd, MMM D, YYYY');
+
+      if(!plan){ wrap.innerHTML = '<div class="text-slate-500">No plan yet.</div>'; renderTimeline(null); return; }
+
+      const rows = plan.items.map(it=>`
+        <div class="grid grid-cols-12 items-center gap-2 py-1 border-b border-slate-100">
           <input class="col-span-4 card !py-1" data-edit="title" data-id="${it.id}" value="${escapeHtml(it.title)}" />
           <select class="col-span-2 card !py-1" data-edit="type" data-id="${it.id}">
             ${['fixed','flexible','meal','rest'].map(t=>`<option ${it.type===t?'selected':''}>${t}</option>`).join('')}
@@ -358,23 +403,23 @@ Assume the date is ${baseDayIso}.`;
           <input class="col-span-2 card !py-1" data-edit="start" data-id="${it.id}" value="${it.start}" placeholder="HH:mm"/>
           <input class="col-span-2 card !py-1" data-edit="end" data-id="${it.id}" value="${it.end}" placeholder="HH:mm"/>
           <input class="col-span-2 card !py-1" data-edit="notes" data-id="${it.id}" value="${escapeHtml(it.notes||'')}" placeholder="notes"/>
-        </div>`;
-      }).join('');
+        </div>
+      `).join('');
+
       wrap.innerHTML = `
-        <div class="grid grid-cols-12 gap-2 text-xs text-gray-500 pb-1">
+        <div class="grid grid-cols-12 gap-2 text-xs text-slate-500 pb-1">
           <div class="col-span-4">Title</div>
           <div class="col-span-2">Type</div>
           <div class="col-span-2">Start</div>
           <div class="col-span-2">End</div>
           <div class="col-span-2">Notes</div>
         </div>
-        ${rows || '<div class="text-gray-500">No items.</div>'}
+        ${rows || '<div class="text-slate-500">No items.</div>'}
         <div class="pt-2">
-          <button id="addRow" class="btn btn-secondary">Add Item</button>
+          <button id="addRow" class="btn btn-ghost flex items-center gap-2"><i data-lucide="plus"></i>Add Item</button>
         </div>
       `;
 
-      // edit handlers
       wrap.querySelectorAll('[data-edit]').forEach(inp=>{
         inp.addEventListener('change', ()=>{
           const id = Number(inp.dataset.id);
@@ -389,11 +434,12 @@ Assume the date is ${baseDayIso}.`;
         });
       });
       $('#addRow').onclick = ()=>{
-        const p = store.plan || emptyPlan(dayjs().format('YYYY-MM-DD'));
+        const p = store.plan || emptyPlan(store.planDay);
         p.items.push({id: (p.items.at(-1)?.id||0)+1, title:'New Task', type:'flexible', start:'', end:'', duration_min:30, notes:''});
         store.plan = p;
         renderPlan(p);
       };
+      lucide.createIcons();
 
       renderTimeline(plan);
     }
@@ -401,84 +447,96 @@ Assume the date is ${baseDayIso}.`;
     function renderTimeline(plan){
       const tl = $('#timeline');
       tl.innerHTML = '';
-      const startHr = 6, endHr = 24; // 6:00 to 24:00
-      // grid hours
+      const startHr = 6, endHr = 24;
+      const day = store.planDay;
+      const totalMin = (endHr - startHr) * 60;
+
+      // grid
       for(let h=startHr; h<=endHr; h++){
-        const line = document.createElement('div');
-        line.className='absolute left-0 right-0 border-t border-gray-200';
         const y = ((h-startHr)/(endHr-startHr))*100;
+        const line = document.createElement('div');
+        line.className='timeline-grid-line';
         line.style.top = y + '%';
         tl.appendChild(line);
 
         const lbl = document.createElement('div');
-        lbl.className='absolute left-0 -translate-y-1/2 text-xs text-gray-500';
+        lbl.className='timeline-label';
         lbl.style.top = y + '%';
         lbl.textContent = (h<10?'0':'')+h+':00';
         tl.appendChild(lbl);
       }
-      if(!plan) return;
-      // blocks
-      const day = plan.day;
-      for(const it of plan.items){
-        if(!it.start || !it.end) continue;
-        const s = dayjs(day+'T'+it.start), e = dayjs(day+'T'+it.end);
-        const totalMin = (endHr-startHr)*60;
-        const startMin = (s.hour()-startHr)*60 + s.minute();
-        const durMin   = e.diff(s,'minute');
-        const topPct   = (startMin/totalMin)*100;
-        const heightPct= (durMin/totalMin)*100;
 
-        const block = document.createElement('div');
-        block.className = 'absolute right-3 left-16 rounded-lg text-xs p-2 text-white shadow';
-        block.style.top = topPct + '%';
-        block.style.height = heightPct + '%';
-        block.style.background = colorForType(it.type);
-        block.innerHTML = `<div class="font-semibold">${escapeHtml(it.title)}</div><div>${it.start}–${it.end}</div>`;
-        tl.appendChild(block);
+      if(plan){
+        for(const it of plan.items){
+          if(!it.start || !it.end) continue;
+          const s = dayjs(day+'T'+it.start), e = dayjs(day+'T'+it.end);
+          const startMin = (s.hour()-startHr)*60 + s.minute();
+          const durMin   = Math.max(10, e.diff(s,'minute')); // min height
+          const topPct   = (startMin/totalMin)*100;
+          const heightPct= (durMin/totalMin)*100;
+
+          const block = document.createElement('div');
+          block.className = 'timeline-block';
+          block.style.top = topPct + '%';
+          block.style.height = heightPct + '%';
+          block.style.background = colorForType(it.type);
+          block.innerHTML = `<div class="font-semibold text-[13px]">${escapeHtml(it.title)}</div><div class="opacity-90">${it.start}–${it.end}</div>`;
+          tl.appendChild(block);
+        }
+      }
+
+      // current-time line (only if viewing today)
+      const todayIso = dayjs().format('YYYY-MM-DD');
+      if(day === todayIso){
+        const now = dayjs();
+        const nowMin = (now.hour()-startHr)*60 + now.minute();
+        if(nowMin >= 0 && nowMin <= totalMin){
+          const nowPct = (nowMin/totalMin)*100;
+          const nowLine = document.createElement('div');
+          nowLine.className = 'timeline-now';
+          nowLine.style.top = nowPct + '%';
+          tl.appendChild(nowLine);
+        }
       }
     }
+
     function colorForType(t){
-      if(t==='fixed') return '#3b82f6';
-      if(t==='meal') return '#10b981';
-      if(t==='rest') return '#8b5cf6';
-      return '#f59e0b'; // flexible
+      if(t==='fixed') return '#2563eb';     // blue
+      if(t==='meal') return '#10b981';      // emerald
+      if(t==='rest') return '#8b5cf6';      // violet
+      return '#f59e0b';                     // amber
     }
 
     // Make / Update plan
     $('#makePlan').onclick = async ()=>{
       const text = $('#planInput').value.trim();
-      const baseDay = detectBaseDay(text) || dayjs().format('YYYY-MM-DD');
+      const detected = detectBaseDay(text);
+      const baseDay = detected || store.planDay || dayjs().format('YYYY-MM-DD');
+      store.planDay = baseDay;
+
       try{
-        // 1) use chrono to pre-anchor relative words (“tomorrow”)
-        // (We still ask LLM to structure to JSON)
-        const draft = await llmPlanDraft(text, baseDay);
-        // Ensure shape
+        const draft = await llmPlanDraft(text || 'Today: breakfast, study 2h, lunch, physics 9:00-11:00, gym 1h, dinner, sleep by 23:00.', baseDay);
         const norm = { items: Array.isArray(draft.items) ? draft.items : (Array.isArray(draft) ? draft : []) };
 
-        // 2) allocation
-        const allocated = allocatePlan(baseDay, norm);
-
-        // 3) merge with prior plan if this is an update
+        // If same day existed, lock user-edited fixed items and reflow others
         const prior = store.plan;
-        let merged = allocated;
-        if(prior && prior.day===allocated.day){
-          // simple “reflow”: take any existing edits with fixed times and keep, then re-add others
+        let finalPlan;
+        if(prior && prior.day === baseDay){
           const locked = prior.items.filter(it=>it.start && it.end);
-          const keepTitles = new Set(locked.map(it=>it.title+'|'+it.start+'|'+it.end));
           const reflowDraft = {
             items: [
               ...locked.map(it=>({title:it.title, type:it.type, start:it.start, end:it.end, notes:it.notes})),
-              ...allocated.items.filter(it=> !keepTitles.has(it.title+'|'+it.start+'|'+it.end))
+              ...norm.items
             ]
           };
-          merged = allocatePlan(baseDay, reflowDraft);
+          finalPlan = allocatePlan(baseDay, reflowDraft);
+        } else {
+          finalPlan = allocatePlan(baseDay, norm);
         }
 
-        store.plan = merged;
-        renderPlan(merged);
-
-        // 4) schedule local notifications 10 min before each item (only while tab is open)
-        scheduleLocalNotifications(merged);
+        store.plan = finalPlan;
+        renderPlan(finalPlan);
+        scheduleLocalNotifications(finalPlan);
 
       }catch(e){
         alert(e.message);
@@ -490,16 +548,28 @@ Assume the date is ${baseDayIso}.`;
       renderPlan(null);
     };
 
+    // Day navigation
+    function shiftDay(delta){
+      const newDay = dayjs(store.planDay).add(delta,'day').format('YYYY-MM-DD');
+      store.planDay = newDay;
+      // if stored plan for that day exists, show it; else show empty plan (until user plans)
+      const p = store.plan && store.plan.day === newDay ? store.plan : null;
+      renderPlan(p);
+    }
+    $('#prevDay').onclick = ()=>shiftDay(-1);
+    $('#nextDay').onclick = ()=>shiftDay(1);
+
     // Export ICS
     $('#exportICS').onclick = ()=>{
       const p = store.plan;
-      if(!p) return alert('No plan to export.');
+      const day = store.planDay;
+      if(!p || p.day !== day || !p.items?.length) return alert('No plan to export for '+day+'.');
       const cal = ics();
       for(const it of p.items){
         if(!it.start || !it.end) continue;
         const start = dayjs(p.day+'T'+it.start);
         const end   = dayjs(p.day+'T'+it.end);
-        cal.addEvent(it.title, it.notes||'', '', 
+        cal.addEvent(it.title, it.notes||'', '',
           [start.year(), start.month()+1, start.date(), start.hour(), start.minute()],
           [end.year(), end.month()+1, end.date(), end.hour(), end.minute()],
           { reminders: [{method:'display', minutes:10}] }
@@ -515,7 +585,7 @@ Assume the date is ${baseDayIso}.`;
         if(!it.start) continue;
         const when = dayjs(plan.day+'T'+it.start).subtract(10,'minute');
         const ms = when.diff(now,'millisecond');
-        if(ms>0 && ms<24*60*60*1000){ // within 24h
+        if(ms>0 && ms<24*60*60*1000){
           setTimeout(()=>{
             new Notification('Upcoming: '+it.title, { body: `${it.start}–${it.end} ${it.notes||''}` });
           }, ms);
@@ -523,72 +593,49 @@ Assume the date is ${baseDayIso}.`;
       }
     }
 
-    function detectBaseDay(text){
-      // Try to detect “tomorrow”, “today”, specific week days via chrono
-      const ref = new Date();
-      const parsed = chrono.parse(text, ref);
-      if(parsed?.length){
-        const d = parsed[0].start?.date();
-        if(d){
-          return dayjs(d).format('YYYY-MM-DD');
-        }
-      }
-      // If “tomorrow” explicit but chrono didn’t catch (rare), default
-      if(/tomorrow/i.test(text)) return dayjs().add(1,'day').format('YYYY-MM-DD');
-      return null;
-    }
-
     /*****************
      * Task Flows    *
      *****************/
     async function llmFlow(text){
-      const sys = `You convert a goal into a STRICT JSON step-by-step flow:
-Return ONLY JSON:
+      const sys = `Convert a goal into STRICT JSON:
 {
   "title": string,
-  "steps": [
-    {"id": 1, "title": string, "detail": string, "status": "todo"|"doing"|"done"},
-    ...
-  ],
+  "steps": [{"id":1,"title":string,"detail":string,"status":"todo"|"doing"|"done"},...],
   "notes": string
 }
-Rules:
-- Break into 5–12 concrete steps maximum.
-- Be specific but concise (what to decide, what to look up, what to book).
-- Prefer a logical order and call out dependencies.`;
-      const out = await askOpenAI([
-        {role:'system', content: sys},
-        {role:'user', content: text}
-      ], {temperature:0.2});
+- 5–12 steps, specific and concise, with dependencies. Return ONLY JSON.`;
+      const out = await askOpenAI(
+        [{role:'system', content: sys},{role:'user', content: text}],
+        {temperature:0.2, json:true}
+      );
       try { return JSON.parse(out); } catch(e){ throw new Error('Flow JSON parse error. Output was:\n' + out); }
     }
 
     function renderFlow(flow){
       const wrap = $('#flowSteps');
-      if(!flow){ wrap.innerHTML = '<div class="text-gray-500">No flow yet.</div>'; return; }
-      const steps = flow.steps?.map(s=>{
-        return `<div class="p-3 rounded-lg border bg-gray-50 flex gap-3 items-start">
+      if(!flow){ wrap.innerHTML = '<div class="text-slate-500">No flow yet.</div>'; return; }
+      const steps = flow.steps?.map(s=>`
+        <div class="p-3 rounded-xl border bg-white flex gap-3 items-start border-slate-100">
           <input type="checkbox" data-step="${s.id}" ${s.status==='done'?'checked':''} class="mt-1"/>
           <div class="flex-1">
             <div class="font-semibold">${escapeHtml(s.title)}</div>
-            <div class="text-sm text-gray-600 whitespace-pre-wrap">${escapeHtml(s.detail)}</div>
+            <div class="text-sm text-slate-600 whitespace-pre-wrap">${escapeHtml(s.detail)}</div>
             <div class="mt-1">
               <select data-stat="${s.id}" class="card !py-1">
                 ${['todo','doing','done'].map(st=>`<option ${s.status===st?'selected':''}>${st}</option>`).join('')}
               </select>
             </div>
           </div>
-        </div>`;
-      }).join('');
+        </div>
+      `).join('');
       wrap.innerHTML = `
         <div class="mb-2">
-          <div class="text-sm text-gray-500">Flow: ${escapeHtml(flow.title)}</div>
+          <div class="text-sm text-slate-500">Flow: ${escapeHtml(flow.title)}</div>
           <textarea id="flowNotes" class="w-full card !py-2 mt-2" rows="2" placeholder="Notes...">${escapeHtml(flow.notes||'')}</textarea>
-          <div class="mt-2"><button id="saveNotes" class="btn btn-secondary">Save Notes</button></div>
+          <div class="mt-2"><button id="saveNotes" class="btn btn-ghost flex items-center gap-2"><i data-lucide="save"></i>Save Notes</button></div>
         </div>
         <div class="space-y-2">${steps || ''}</div>
       `;
-
       wrap.querySelectorAll('[data-step]').forEach(cb=>{
         cb.addEventListener('change', ()=>{
           const id = Number(cb.dataset.step);
@@ -604,31 +651,25 @@ Rules:
           const f = store.flow; const st = f.steps.find(x=>x.id===id);
           if(!st) return;
           st.status = sel.value;
-          store.flow = f; // no re-render needed
+          store.flow = f;
         });
       });
       $('#saveNotes').onclick = ()=>{
         const f = store.flow; f.notes = $('#flowNotes').value; store.flow = f; alert('Saved.');
       };
+      lucide.createIcons();
     }
 
     $('#makeFlow').onclick = async ()=>{
       const text = $('#flowInput').value.trim();
       if(!text) return;
-      try{
-        const f = await llmFlow(text);
-        store.flow = f;
-        renderFlow(f);
-      }catch(e){
-        alert(e.message);
-      }
+      try{ const f = await llmFlow(text); store.flow = f; renderFlow(f); }
+      catch(e){ alert(e.message); }
     };
-    $('#resetFlow').onclick = ()=>{
-      store.flow = null; renderFlow(null);
-    };
+    $('#resetFlow').onclick = ()=>{ store.flow = null; renderFlow(null); };
 
     // initial renders
-    renderPlan(store.plan);
+    renderPlan(store.plan && store.plan.day===store.planDay ? store.plan : null);
     renderFlow(store.flow);
 
     /*************
@@ -638,4 +679,5 @@ Rules:
   </script>
 </body>
 </html>
+
 
