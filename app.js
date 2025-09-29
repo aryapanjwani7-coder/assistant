@@ -7,6 +7,10 @@ const $ = (s)=>document.querySelector(s);
 const $$ = (s)=>document.querySelectorAll(s);
 const ESC = (s)=> (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m]));
 
+// Timeline vertical bounds (once!)
+const START_HR = 6;  // 06:00
+const END_HR   = 24; // 24:00
+
 /********************
  * Persistent store *
  ********************/
@@ -20,7 +24,7 @@ const store = {
   get chatHistory(){ return JSON.parse(localStorage.getItem('CHAT_HISTORY') || '[]'); },
   set chatHistory(v){ localStorage.setItem('CHAT_HISTORY', JSON.stringify(v)); },
 
-  // Per-day plans: { "YYYY-MM-DD": { day, items:[...], meta: {...} } }
+  // Per-day plans: { "YYYY-MM-DD": { day, items:[...], unplaced:[...]} }
   get plans(){ return JSON.parse(localStorage.getItem('PLANS_BY_DAY') || '{}'); },
   set plans(v){ localStorage.setItem('PLANS_BY_DAY', JSON.stringify(v)); },
 
@@ -29,17 +33,27 @@ const store = {
 
   get settings(){ return JSON.parse(localStorage.getItem('PLAN_SETTINGS') || '{"earliest":"08:00","latest":"23:30","minGap":10,"travelSame":10,"travelDiff":20,"homeBase":""}'); },
   set settings(v){ localStorage.setItem('PLAN_SETTINGS', JSON.stringify(v)); },
+
+  // Projects: { id: {id,title,type,budget,start,end,tags,brief,history:[...], tasks:[...], itinerary:[...], insights:[...], widgets:[...] } }
+  get projects(){ return JSON.parse(localStorage.getItem('PROJECTS_V1') || '{}'); },
+  set projects(v){ localStorage.setItem('PROJECTS_V1', JSON.stringify(v)); },
+
+  get currentProjectId(){ return localStorage.getItem('CURRENT_PROJECT_ID') || ''; },
+  set currentProjectId(v){ localStorage.setItem('CURRENT_PROJECT_ID', v); },
 };
 
 function getPlan(day){ return store.plans[day] || null; }
 function setPlan(day, plan){ const all = store.plans; all[day] = plan; store.plans = all; }
+
+function getProject(id){ return store.projects[id] || null; }
+function setProject(p){ const all = store.projects; all[p.id] = p; store.projects = all; }
 
 /*****************
  * Tabs & header *
  *****************/
 (function initTabs(){
   const tabs = $$('.tab');
-  const sections = ['chat','plan','flows'];
+  const sections = ['projects','plan','chat'];
   tabs.forEach(btn=>{
     btn.addEventListener('click', ()=>{
       sections.forEach(id=>$('#'+id).classList.add('hidden'));
@@ -47,9 +61,11 @@ function setPlan(day, plan){ const all = store.plans; all[day] = plan; store.pla
       tabs.forEach(b=>b.classList.remove('bg-blue-600','text-white'));
       btn.classList.add('bg-blue-600','text-white');
       lucide.createIcons();
+      if(btn.dataset.tab==='projects') renderProjectList();
+      if(btn.dataset.tab==='plan') renderPlanFor(store.planDay);
     });
   });
-  document.querySelector('[data-tab="plan"]').click();
+  document.querySelector('[data-tab="projects"]').click();
 
   // API Key & model
   $('#apiKey').value = store.key;
@@ -118,9 +134,7 @@ async function askOpenAI(messages, {temperature=0.2, json=false} = {}){
 /************
  * Planner  *
  ************/
-const startHr = 6, endHr = 24;
-
-function emptyPlan(dayIso){ return { day: dayIso, items: [], meta: { clarifications: [] } }; }
+function emptyPlan(dayIso){ return { day: dayIso, items: [], unplaced: [] }; }
 
 // Normalize ranges like "9-9:50am" → "9am to 9:50am"
 function normalizeTimeRange(line) {
@@ -136,7 +150,7 @@ function normalizeTimeRange(line) {
   return s;
 }
 
-/* ---------- Local fallback (if OpenAI fails) ---------- */
+/* Local fallback (if OpenAI fails) */
 function localDraft(text){
   const lines = text.split(/\n+|[.;]\s+/).map(s=>normalizeTimeRange(s.trim())).filter(Boolean);
   const items = [];
@@ -186,13 +200,12 @@ function localDraft(text){
       continue;
     }
 
-    // wake/sleep markers with no time → collect as context, not schedule
     if(/\bwake\s*up\b/i.test(line) && !durMin && !parsed.length){
-      items.push({ title:'Wake up', type:'marker', start:'', end:'', duration_min:0, notes:'' });
+      items.push({ title:'Wake up', type:'marker', start:'', end:'', duration_min:0, location:'', notes:'' });
       continue;
     }
     if(/\bsleep\b/i.test(line) && /by/i.test(line) && !parsed.length){
-      items.push({ title:'Sleep', type:'rest', start:'', end:'23:00', duration_min:0, notes:'' });
+      items.push({ title:'Sleep', type:'rest', start:'', end:'23:00', duration_min:0, location:'', notes:'' });
       continue;
     }
 
@@ -203,136 +216,69 @@ function localDraft(text){
   return { items };
 }
 
-/* ---------- AI-first parsing with strict JSON ---------- */
+/* AI-first parsing for daily plan */
 async function aiDraft(text, baseDayIso){
   const sys = `
-You are a scheduling parser. Convert natural text into STRICT JSON:
-{
-  "day": "YYYY-MM-DD",
-  "items": [
-    {
-      "title": "Breakfast with Kobe",
-      "type": "fixed" | "flexible" | "meal" | "rest" | "marker",
-      "start": "HH:mm",
-      "end":   "HH:mm",
-      "duration_min": 0,
-      "location": "",
-      "notes": ""
-    }
-  ]
-}
+You are a scheduling parser. Return STRICT JSON:
+{"day":"YYYY-MM-DD","items":[{"title":string,"type":"fixed"|"flexible"|"meal"|"rest"|"marker","start":"HH:mm","end":"HH:mm","duration_min":0,"location":"","notes":""}]}
 Rules:
-- Assume date ${baseDayIso} unless another date is clearly stated.
-- Understand sloppy ranges like "9-9:50am" (fill missing am/pm).
-- Extract companions/locations: keep "with X" in title; if "at Y" put Y in "location".
-- Meals without times default durations: breakfast 30m, lunch 45m, dinner 45m (mark type "meal").
-- "Sleep by 11" -> rest item with end:"23:00" if no explicit time; if "sleep 23:30–07:00" provide both times.
-- "Wake up" can be type "marker" if no time given; if time is given, treat as fixed (0–5m).
-- Chores with duration but no time -> flexible with duration_min.
-- Output MUST be valid JSON. No commentary.`;
-
-  const fewshotUser = `Examples:
-- "tomorrow I'll have breakfast from 9-9:50am with Kobe at De Neve"
-- "physics 9–11 in Boelter 3400; lunch with Maya ~1 for 45m; meditate; cut nails (10m); sleep by 11; wake up"`;
-
-  const fewshotAssistant = JSON.stringify({
-    day: baseDayIso,
-    items: [
-      { title: "Breakfast with Kobe", type: "meal", start: "09:00", end: "09:50", duration_min: 50, location: "De Neve", notes: "" },
-      { title: "Physics (Boelter 3400)", type: "fixed", start: "09:00", end: "11:00", duration_min: 120, location: "", notes: "" },
-      { title: "Lunch with Maya", type: "meal", start: "13:00", end: "13:45", duration_min: 45, location: "", notes: "" },
-      { title: "Meditate", type: "flexible", start: "", end: "", duration_min: 20, location: "", notes: "" },
-      { title: "Cut nails", type: "flexible", start: "", end: "", duration_min: 10, location: "", notes: "" },
-      { title: "Sleep", type: "rest", start: "", end: "23:00", duration_min: 0, location: "", notes: "" },
-      { title: "Wake up", type: "marker", start: "", end: "", duration_min: 0, location: "", notes: "" }
-    ]
-  });
-
-  const user = `User text:\n"""${text}"""`;
-
-  const out = await askOpenAI(
-    [
-      { role:'system', content: sys },
-      { role:'user', content: fewshotUser },
-      { role:'assistant', content: fewshotAssistant },
-      { role:'user', content: user }
-    ],
-    { temperature: 0.1, json: true }
-  );
+- Assume date ${baseDayIso}.
+- Parse "9-9:50am" etc. Keep companions in title; "at X" -> location.
+- Meals w/out times default durations: breakfast 30m, lunch 45m, dinner 45m.
+- "Sleep by 11" -> rest with end "23:00" if time not explicit; "Wake up" can be "marker" without time.
+- Output ONLY JSON.`;
+  const out = await askOpenAI([{role:'system',content:sys},{role:'user',content:text}], {temperature:0.1, json:true});
   return JSON.parse(out);
 }
 
-/* ---------- Deduplication when updating plan ---------- */
+/* Deduplication for daily plan */
 function canonicalTitle(s){
-  return (s||'')
-    .toLowerCase()
-    .replace(/\s+/g,' ')
-    .replace(/[.,;:!?]+/g,'')
-    .trim();
+  return (s||'').toLowerCase().replace(/\s+/g,' ').replace(/[.,;:!?]+/g,'').trim();
 }
 function timesKey(s,e){ return (s&&e) ? `${s}-${e}` : ''; }
-
 function dedupeMergeItems(existingItems, newItems){
   const merged = [...existingItems];
-  const seen = new Map(); // key = title|timesKey -> idx
-
-  // seed with existing
+  const seen = new Map();
   for(let i=0;i<merged.length;i++){
-    const k = canonicalTitle(merged[i].title)+'|'+timesKey(merged[i].start, merged[i].end);
-    seen.set(k, i);
+    seen.set(canonicalTitle(merged[i].title)+'|'+timesKey(merged[i].start, merged[i].end), i);
   }
-
   for(const it of newItems){
     const key = canonicalTitle(it.title)+'|'+timesKey(it.start, it.end);
-    if(seen.has(key)) {
-      // merge notes/location if new one has more
+    if(seen.has(key)){
       const idx = seen.get(key);
       if((it.notes||'').length > (merged[idx].notes||'').length) merged[idx].notes = it.notes;
       if((it.location||'').length > (merged[idx].location||'').length) merged[idx].location = it.location;
-      continue; // skip duplicate
+      continue;
     }
-
-    // for flexible duplicates with no times: avoid exact title duplicate
     if(!it.start && !it.end){
       const dupIdx = merged.findIndex(x => !x.start && !x.end && canonicalTitle(x.title)===canonicalTitle(it.title));
       if(dupIdx>=0){
-        // keep longer duration / richer notes
         if((it.duration_min||0) > (merged[dupIdx].duration_min||0)) merged[dupIdx].duration_min = it.duration_min;
         if((it.notes||'').length > (merged[dupIdx].notes||'').length) merged[dupIdx].notes = it.notes;
         continue;
       }
     }
-
-    seen.set(key, merged.length);
-    merged.push(it);
+    seen.set(key, merged.length); merged.push(it);
   }
-
   return merged;
 }
 
-/* ---------- Compute context (wake, sleep) & settings ---------- */
+/* Derive settings (wake/sleep) */
 function deriveSettingsFromItems(items, baseSettings){
   const s = {...baseSettings};
-  // look for wake up explicit time
   const wake = items.find(x=>/wake\s*up/i.test(x.title) && x.start);
   if(wake) s.earliest = wake.start;
-  // sleep by
   const sleep = items.find(x=>x.type==='rest' && x.end && !x.start);
   if(sleep) s.latest = sleep.end;
 
-  // clarifications
   const clarifications = [];
   if(!wake && items.some(x=>/wake\s*up/i.test(x.title))) {
     clarifications.push('What time do you want to wake up? (Using '+s.earliest+' for now)');
   }
-  if(items.some(x=>/yoga\s*nidra/i.test(x.title)) && !items.some(x=>/home|dorm|apartment|house|dykstra/i.test((x.location||'')+' '+(x.notes||'')))){
-    clarifications.push('Do you plan to do Yoga Nidra at home or elsewhere? (affects travel buffer)');
-  }
-
   return {settings: s, clarifications};
 }
 
-/* ---------- Allocation with gaps & travel buffers ---------- */
+/* Allocation with buffers */
 function allocatePlan(baseDayIso, draft, settings){
   const earliest = settings.earliest || '08:00';
   const latest   = settings.latest   || '23:30';
@@ -344,19 +290,13 @@ function allocatePlan(baseDayIso, draft, settings){
   const startOfDay = toTime(earliest);
   const endOfDay   = toTime(latest);
 
-  // Split items
-  const fixed=[], flex=[], markers=[];
+  const fixed=[], flex=[];
   for(const raw of (draft.items||[])){
     const it = {...raw};
-    if(it.type==='marker'){ markers.push(it); continue; }
-
-    // treat ANY item with explicit start+end as fixed
     if(it.start && it.end){
       fixed.push({...it, startDT: toTime(it.start), endDT: toTime(it.end)});
       continue;
     }
-
-    // Normalize durations
     let d = Number(it.duration_min)||0;
     if(it.type==='meal' && !d){
       const t = (it.title||'').toLowerCase();
@@ -365,49 +305,29 @@ function allocatePlan(baseDayIso, draft, settings){
     flex.push({...it, duration_min: d || 30});
   }
 
-  // Sort fixed
   fixed.sort((a,b)=>a.startDT - b.startDT);
 
-  // Build gaps considering minGap before/after fixed & travel buffer towards next fixed
   const gaps = [];
   let cursor = startOfDay;
-
-  function bufferBefore(startDT, prev){
-    // min gap after previous event
-    let buf = minGap;
-    if(prev){
-      const sameLoc = (prev.location||'').toLowerCase() && (prev.location||'').toLowerCase() === (startDT.location||'').toLowerCase();
-      buf = Math.max(buf, sameLoc ? travelSame : travelDiff);
-    }
-    return buf;
-  }
-
   let prevFixed = null;
-  for(let i=0;i<fixed.length;i++){
-    const f = fixed[i];
 
-    // shrink left by minGap after prev fixed + travel
+  for(const f of fixed){
     let gapStart = cursor;
     if(prevFixed){
       const sameLoc = (prevFixed.location||'').toLowerCase() && (prevFixed.location||'').toLowerCase() === (f.location||'').toLowerCase();
       const leftBuf = sameLoc ? travelSame : travelDiff;
       if(gapStart.isBefore(prevFixed.endDT.add(leftBuf,'minute'))) gapStart = prevFixed.endDT.add(leftBuf,'minute');
     } else {
-      // first gap: ensure not before earliest
       if(gapStart.isBefore(startOfDay)) gapStart = startOfDay;
     }
-
-    // shrink right by minGap before this fixed (and base travel to it)
     const rightBuf = f.location ? travelDiff : minGap;
     const gapEnd = f.startDT.subtract(rightBuf,'minute');
-
     if(gapEnd.isAfter(gapStart)) gaps.push({start: gapStart, end: gapEnd});
 
     cursor = f.endDT;
     prevFixed = f;
   }
 
-  // Last trailing gap
   if(cursor.isBefore(endOfDay)){
     let tailStart = cursor.add(minGap,'minute');
     if(prevFixed && prevFixed.location) tailStart = prevFixed.endDT.add(travelDiff,'minute');
@@ -415,30 +335,23 @@ function allocatePlan(baseDayIso, draft, settings){
     if(tailEnd.isAfter(tailStart)) gaps.push({start: tailStart, end: tailEnd});
   }
 
-  // Place flex greedily into gaps
   const placed = [...fixed];
   const unplaced = [];
 
   function fits(gap, minutes){ return gap.end.diff(gap.start,'minute') >= minutes; }
-
   function placeOne(task){
     for(const g of gaps){
       if(!fits(g, task.duration_min)) continue;
       task.startDT = g.start;
       task.endDT   = g.start.add(task.duration_min,'minute');
-      // advance gap start with minGap after this task
       g.start = task.endDT.add(minGap,'minute');
       placed.push(task);
       return true;
     }
     return false;
   }
+  for(const t of flex){ if(!placeOne(t)) unplaced.push(t); }
 
-  for(const t of flex){
-    if(!placeOne(t)) unplaced.push(t);
-  }
-
-  // Normalize output
   let id=1;
   const items = placed.map(it=>{
     const start = it.startDT ? it.startDT.format('HH:mm') : (it.start||'');
@@ -452,10 +365,8 @@ function allocatePlan(baseDayIso, draft, settings){
 }
 
 /***************
- * Rendering   *
+ * Rendering (Plan)
  ***************/
-const startHr = 6, endHr = 24;
-
 function renderPlanFor(day){
   store.planDay = day;
   const badge = $('#planDayBadge'); const label = $('#currentDayLabel');
@@ -515,7 +426,6 @@ function renderPlan(plan){
     setPlan(day, p); renderPlan(p);
   });
 
-  // Unplaced
   if(unp){
     if(plan.unplaced?.length){
       unp.innerHTML = `
@@ -537,9 +447,9 @@ function renderPlan(plan){
 function renderTimeline(plan){
   const tl = $('#timeline'); if(!tl) return;
   tl.innerHTML = '';
-  const totalMin = (endHr - startHr)*60;
-  for(let h=startHr; h<=endHr; h++){
-    const y = ((h-startHr)/(endHr-startHr))*100;
+  const totalMin = (END_HR - START_HR)*60;
+  for(let h=START_HR; h<=END_HR; h++){
+    const y = ((h-START_HR)/(END_HR-START_HR))*100;
     const line = document.createElement('div'); line.className='timeline-grid-line'; line.style.top = y+'%'; tl.appendChild(line);
     const lbl = document.createElement('div'); lbl.className='timeline-label'; lbl.style.top = y+'%'; lbl.textContent = (h<10?'0':'')+h+':00'; tl.appendChild(lbl);
   }
@@ -548,7 +458,7 @@ function renderTimeline(plan){
     for(const it of plan.items){
       if(!it.start || !it.end) continue;
       const s = dayjs(day+'T'+it.start), e = dayjs(day+'T'+it.end);
-      const startMin = (s.hour()-startHr)*60 + s.minute();
+      const startMin = (s.hour()-START_HR)*60 + s.minute();
       const durMin = Math.max(10, e.diff(s,'minute'));
       const topPct = (startMin/totalMin)*100;
       const heightPct = (durMin/totalMin)*100;
@@ -562,7 +472,7 @@ function renderTimeline(plan){
   }
   const today = dayjs().format('YYYY-MM-DD');
   if(day===today){
-    const now = dayjs(); const nowMin = (now.hour()-startHr)*60 + now.minute();
+    const now = dayjs(); const nowMin = (now.hour()-START_HR)*60 + now.minute();
     if(nowMin>=0 && nowMin<=totalMin){
       const nowLine = document.createElement('div'); nowLine.className='timeline-now';
       nowLine.style.top = ((nowMin/totalMin)*100)+'%'; tl.appendChild(nowLine);
@@ -586,7 +496,6 @@ $('#makePlan')?.addEventListener('click', async ()=>{
   const baseDay = detectBaseDay(raw);
   store.planDay = baseDay;
 
-  // Load settings from UI
   const currentSettings = {
     earliest: $('#earliestStart').value || '08:00',
     latest:   $('#latestEnd').value   || '23:30',
@@ -597,7 +506,6 @@ $('#makePlan')?.addEventListener('click', async ()=>{
   };
   store.settings = currentSettings;
 
-  // AI-first, fallback to local
   let parsed;
   try{
     parsed = await aiDraft(raw, baseDay);
@@ -606,18 +514,15 @@ $('#makePlan')?.addEventListener('click', async ()=>{
     parsed = localDraft(raw);
   }
 
-  // Merge with prior items (dedupe)
   const prior = getPlan(baseDay);
   const priorItems = prior ? prior.items : [];
   const mergedItems = dedupeMergeItems(priorItems, parsed.items || []);
 
-  // Derive settings from items (wake/sleep context)
   const derived = deriveSettingsFromItems(mergedItems, currentSettings);
   const settings = derived.settings;
   const clar = derived.clarifications || [];
   renderClarifications(clar);
 
-  // Allocate
   const finalPlan = allocatePlan(baseDay, { items: mergedItems }, settings);
   setPlan(baseDay, finalPlan);
   renderPlanFor(baseDay);
@@ -688,51 +593,366 @@ function detectBaseDay(text){
   return store.planDay || dayjs().format('YYYY-MM-DD');
 }
 
+/***********************
+ * PROJECTS (new)      *
+ ***********************/
+$('#newProject')?.addEventListener('click', ()=>{
+  const id = 'p_' + Math.random().toString(36).slice(2,9);
+  const p = { id, title:'Untitled Project', type:'', budget:'', start:'', end:'', tags:'', brief:'', history:[], tasks:[], itinerary:[], insights:[], widgets:[], followups:[] };
+  setProject(p); store.currentProjectId = id;
+  renderProjectList(); loadProjectIntoUI(p);
+});
+
+$('#clearProject')?.addEventListener('click', ()=>{
+  const id = store.currentProjectId; if(!id) return;
+  const p = getProject(id); if(!p) return;
+  p.tasks=[]; p.itinerary=[]; p.insights=[]; p.widgets=[]; p.followups=[]; p.history=[]; p.brief='';
+  setProject(p); loadProjectIntoUI(p);
+});
+
+function renderProjectList(){
+  const wrap = $('#projectList'); if(!wrap) return;
+  const all = Object.values(store.projects);
+  if(!all.length){ wrap.innerHTML = '<div class="text-slate-500 p-2">No projects yet. Click <b>New</b>.</div>'; return; }
+  wrap.innerHTML = all.map(p=>`
+    <div class="p-2 rounded-lg border ${p.id===store.currentProjectId?'bg-indigo-50 border-indigo-200':'bg-white border-slate-200'} hover:bg-slate-50 cursor-pointer flex items-center justify-between" data-pid="${p.id}">
+      <div>
+        <div class="font-semibold">${ESC(p.title||'Untitled')}</div>
+        <div class="text-xs text-slate-500">${ESC(p.type||'')}${p.start? ' • '+p.start:''}${p.end? ' → '+p.end:''}</div>
+      </div>
+      <button class="btn btn-ghost text-red-600" data-del="${p.id}"><i data-lucide="trash"></i></button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('[data-pid]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{
+      const pid = el.dataset.pid;
+      if((ev.target.closest('button')?.dataset.del)) return;
+      store.currentProjectId = pid;
+      renderProjectList(); loadProjectIntoUI(getProject(pid));
+    });
+  });
+  wrap.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.del;
+      const all = store.projects; delete all[id]; store.projects = all;
+      if(store.currentProjectId===id) store.currentProjectId='';
+      renderProjectList(); clearProjectUI();
+    });
+  });
+  lucide.createIcons();
+}
+
+function clearProjectUI(){
+  $('#projectHeader').innerHTML = `<span class="pill">No project selected</span>`;
+  $('#projTitle').value=''; $('#projType').value=''; $('#projBudget').value='';
+  $('#projStart').value=''; $('#projEnd').value=''; $('#projTags').value='';
+  $('#projBrief').value='';
+  $('#projTasks').innerHTML=''; $('#projItin').innerHTML=''; $('#projInsights').innerHTML=''; $('#projWidgets').innerHTML=''; $('#projFollowups').innerHTML='';
+}
+
+function loadProjectIntoUI(p){
+  if(!p){ clearProjectUI(); return; }
+  $('#projectHeader').innerHTML = `
+    <span class="pill">${ESC(p.title || 'Untitled Project')}</span>
+    ${p.type? `<span class="pill">${ESC(p.type)}</span>`:''}
+    ${p.budget? `<span class="pill">Budget: ${ESC(p.budget)}</span>`:''}
+    ${p.start? `<span class="pill">Start: ${ESC(p.start)}</span>`:''}
+    ${p.end? `<span class="pill">End: ${ESC(p.end)}</span>`:''}
+  `;
+  $('#projTitle').value = p.title||'';
+  $('#projType').value  = p.type||'';
+  $('#projBudget').value= p.budget||'';
+  $('#projStart').value = p.start||'';
+  $('#projEnd').value   = p.end||'';
+  $('#projTags').value  = p.tags||'';
+  $('#projBrief').value = p.brief||'';
+
+  renderTasks(p.tasks||[]);
+  renderItinerary(p.itinerary||[]);
+  renderInsights(p.insights||[]);
+  renderWidgets(p.widgets||[]);
+  renderFollowups(p.followups||[]);
+}
+
+['projTitle','projType','projBudget','projStart','projEnd','projTags','projBrief'].forEach(id=>{
+  $('#'+id)?.addEventListener('change', ()=>{
+    const pid = store.currentProjectId; if(!pid) return;
+    const p = getProject(pid); if(!p) return;
+    p.title   = $('#projTitle').value.trim();
+    p.type    = $('#projType').value.trim();
+    p.budget  = $('#projBudget').value.trim();
+    p.start   = $('#projStart').value.trim();
+    p.end     = $('#projEnd').value.trim();
+    p.tags    = $('#projTags').value.trim();
+    p.brief   = $('#projBrief').value.trim();
+    setProject(p); loadProjectIntoUI(p); renderProjectList();
+  });
+});
+
+/* Project AI generation */
+$('#genProject')?.addEventListener('click', async ()=>{
+  const pid = store.currentProjectId || (()=>{
+    const id = 'p_' + Math.random().toString(36).slice(2,9);
+    const p = { id, title:'Untitled Project', type:'', budget:'', start:'', end:'', tags:'', brief:'', history:[], tasks:[], itinerary:[], insights:[], widgets:[], followups:[] };
+    setProject(p); store.currentProjectId=id; renderProjectList(); return id;
+  })();
+
+  const p = getProject(pid);
+  // Build a compact brief for the model
+  const brief = {
+    title: $('#projTitle').value || p.title,
+    type: $('#projType').value || p.type,
+    budget: $('#projBudget').value || p.budget,
+    start: $('#projStart').value || p.start,
+    end: $('#projEnd').value || p.end,
+    tags: ($('#projTags').value || p.tags || '').split(',').map(s=>s.trim()).filter(Boolean),
+    notes: $('#projBrief').value || p.brief
+  };
+
+  try{
+    const res = await aiProjectPlanner(brief, p);
+    // Merge/replace
+    p.title   = res.project.title || p.title;
+    p.type    = res.project.type  || p.type;
+    p.budget  = res.project.budget|| p.budget;
+    p.start   = res.project.start || p.start;
+    p.end     = res.project.end   || p.end;
+    p.widgets = res.project.widgets || [];
+    p.insights= res.project.insights || [];
+    p.followups = res.project.followups || [];
+    p.tasks   = mergeTasks(p.tasks, res.project.tasks || []);
+    p.itinerary = mergeItinerary(p.itinerary, res.project.itinerary || []);
+    p.brief = brief.notes;
+    p.history.push({ ts: Date.now(), brief });
+
+    setProject(p); loadProjectIntoUI(p); renderProjectList();
+  }catch(e){
+    alert('Project AI error: ' + e.message);
+  }
+});
+
+/* Project → Schedule sync */
+$('#syncToSchedule')?.addEventListener('click', ()=>{
+  const pid = store.currentProjectId; if(!pid) return alert('Select a project first.');
+  const p = getProject(pid); if(!p || !(p.itinerary||[]).length) return alert('No itinerary to sync.');
+  // For each itinerary item: add to that date's plan
+  const defaults = store.settings || { earliest:'08:00', latest:'23:30', minGap:10, travelDiff:20, travelSame:10 };
+  const byDate = {};
+  for(const it of p.itinerary){
+    const day = it.date;
+    if(!day) continue;
+    byDate[day] = byDate[day] || [];
+    const item = {
+      title: it.title,
+      type: (it.start && it.end) ? 'fixed' : 'flexible',
+      start: it.start || '',
+      end: it.end || '',
+      duration_min: it.duration_min || (it.start && it.end ? dayjs(day+'T'+it.end).diff(dayjs(day+'T'+it.start),'minute'):30),
+      location: it.location || '',
+      notes: it.notes || `[${p.title}]`
+    };
+    byDate[day].push(item);
+  }
+
+  for(const day of Object.keys(byDate)){
+    const prior = getPlan(day) || emptyPlan(day);
+    const mergedItems = dedupeMergeItems(prior.items, byDate[day]);
+    const finalPlan = allocatePlan(day, { items: mergedItems }, defaults);
+    setPlan(day, finalPlan);
+  }
+  alert('Itinerary synced to your Schedule. Open the Plan tab to review.');
+});
+
+/* ---- Project rendering helpers ---- */
+function renderTasks(tasks){
+  const wrap = $('#projTasks'); if(!wrap) return;
+  if(!tasks.length){ wrap.innerHTML = '<div class="text-slate-500">No tasks yet.</div>'; return; }
+  wrap.innerHTML = tasks.map(t=>`
+    <div class="p-2 rounded-lg border bg-white border-slate-200 flex items-start gap-2">
+      <input type="checkbox" ${t.status==='done'?'checked':''} data-task="${ESC(t.id)}" class="mt-1">
+      <div class="flex-1">
+        <div class="font-semibold">${ESC(t.title)}</div>
+        <div class="text-sm text-slate-600 whitespace-pre-wrap">${ESC(t.detail||'')}</div>
+        <div class="text-xs text-slate-500 mt-1">Owner: ${ESC(t.owner||'me')} • ${ESC(t.category||'general')} • ${t.eta_min? t.eta_min+'m':''}</div>
+      </div>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('[data-task]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const pid = store.currentProjectId; if(!pid) return;
+      const p = getProject(pid); if(!p) return;
+      const task = p.tasks.find(x=>String(x.id)===cb.dataset.task); if(!task) return;
+      task.status = cb.checked ? 'done' : 'todo';
+      setProject(p); renderTasks(p.tasks);
+    });
+  });
+}
+
+function renderItinerary(it){
+  const wrap = $('#projItin'); if(!wrap) return;
+  if(!it.length){ wrap.innerHTML = '<div class="text-slate-500">No itinerary yet.</div>'; return; }
+  const groups = {};
+  for(const item of it){ groups[item.date] = groups[item.date] || []; groups[item.date].push(item); }
+  wrap.innerHTML = Object.keys(groups).sort().map(date=>{
+    const rows = groups[date].map(x=>`
+      <div class="grid grid-cols-12 items-center gap-2 py-1 border-b border-slate-100">
+        <div class="col-span-3">${ESC(x.start||'')} ${x.end? '– '+ESC(x.end):''}</div>
+        <div class="col-span-5 font-semibold">${ESC(x.title)}</div>
+        <div class="col-span-4 text-slate-600">${ESC(x.location||'')}${x.notes? ' • '+ESC(x.notes):''}</div>
+      </div>
+    `).join('');
+    return `<div class="mb-2">
+      <div class="font-semibold">${dayjs(date).format('ddd, MMM D, YYYY')} (${date})</div>
+      <div class="mt-1">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderInsights(ins){
+  const wrap = $('#projInsights'); if(!wrap) return;
+  if(!ins.length){ wrap.innerHTML = '<div class="text-slate-500">No insights yet. Generate to see suggestions.</div>'; return; }
+  wrap.innerHTML = '<ul class="list-disc pl-5 space-y-1">'+ins.map(i=>`<li>${ESC(i)}</li>`).join('')+'</ul>';
+}
+
+function renderWidgets(w){
+  const wrap = $('#projWidgets'); if(!wrap) return;
+  if(!w.length){ wrap.innerHTML = '<div class="text-slate-500">No widgets yet.</div>'; return; }
+  wrap.innerHTML = w.map(x=>`
+    <div class="p-3 rounded-xl border bg-white border-slate-200">
+      <div class="text-xs text-slate-500">${ESC(x.name)}</div>
+      <div class="text-xl font-extrabold">${ESC(String(x.value))}<span class="text-sm font-semibold ml-1">${ESC(x.unit||'')}</span></div>
+    </div>
+  `).join('');
+}
+
+function renderFollowups(qs){
+  const wrap = $('#projFollowups'); if(!wrap) return;
+  if(!qs.length){ wrap.innerHTML = '<div class="text-slate-500">No questions. The AI will add clarifying questions here.</div>'; return; }
+  wrap.innerHTML = qs.map((q,i)=>`
+    <div class="flex items-center justify-between p-2 rounded-lg border bg-white border-slate-200 mt-1">
+      <div>${ESC(q)}</div>
+      <button class="btn btn-ghost kbd" data-answer="${i}">Answer</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('[data-answer]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = +btn.dataset.answer;
+      const ans = prompt('Your answer:'); if(!ans) return;
+      const pid = store.currentProjectId; const p = getProject(pid); if(!p) return;
+      p.history.push({ts:Date.now(), answer:{q:p.followups[idx], a:ans}});
+      // Append answer into brief to guide next update
+      p.brief = (p.brief||'') + `\nAnswer: ${p.followups[idx]} -> ${ans}`;
+      setProject(p); loadProjectIntoUI(p);
+      alert('Answer saved. Click "Generate / Update Plan" to refine the project.');
+    });
+  });
+}
+
+/* Merge helpers */
+function mergeTasks(existing, incoming){
+  const byKey = new Map();
+  const key = (t)=> (t.title||'').toLowerCase().trim();
+  existing.forEach(t=>byKey.set(key(t), t));
+  for(const t of incoming){
+    const k = key(t);
+    if(!byKey.has(k)){ byKey.set(k, t); continue; }
+    // merge fields
+    const old = byKey.get(k);
+    old.detail = (t.detail||'').length > (old.detail||'').length ? t.detail : old.detail;
+    old.category = old.category || t.category;
+    old.eta_min = old.eta_min || t.eta_min;
+  }
+  return Array.from(byKey.values());
+}
+function mergeItinerary(existing, incoming){
+  const out = [...existing];
+  const has = (a,b)=> a.date===b.date && (a.start||'')===(b.start||'') && (a.end||'')===(b.end||'') && (a.title||'').toLowerCase().trim()===(b.title||'').toLowerCase().trim();
+  for(const it of incoming){
+    if(out.some(x=>has(x,it))) continue;
+    out.push(it);
+  }
+  // sort by date+time
+  out.sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.start||'').localeCompare(b.start||''));
+  return out;
+}
+
+/* --------- AI: Project Planner & Insight Engine ---------- */
+async function aiProjectPlanner(brief, currentProject){
+  const sys = `
+You are a pragmatic project planner, itinerary builder, and insight engine.
+Return STRICT JSON ONLY in this schema:
+
+{
+  "project": {
+    "title": string,
+    "type": string,
+    "budget": string,
+    "start": "YYYY-MM-DD",
+    "end": "YYYY-MM-DD",
+    "summary": string,
+    "widgets": [{"name":string,"value":number|string,"unit":string}],
+    "insights": [string],
+    "followups": [string],
+    "tasks": [
+      {"id": string|number, "title": string, "detail": string, "status":"todo"|"doing"|"done", "category": string, "owner": string, "eta_min": number}
+    ],
+    "itinerary": [
+      {"date": "YYYY-MM-DD", "title": string, "start": "HH:mm", "end": "HH:mm", "duration_min": number, "location": string, "notes": string}
+    ]
+  }
+}
+
+Rules:
+- Be decisive: fill gaps with reasonable defaults; ask only a few high-impact follow-up questions.
+- Use budget/dates/type to tailor tasks and insights.
+- If user provided full itinerary, keep assistance light; still add 2–4 thoughtful suggestions if time exists.
+- Include widgets for the crucial KPIs (e.g., "Total days", "Budget", "Avg daily budget", "Flights cost", "Buffer hours").
+- Keep "itinerary" chronological; times may be approximate if not provided.
+- Keep "tasks" actionable (verbs), 5–12 items typical; categorize (flights, lodging, activities, docs, packing, misc).
+- Never include non-JSON commentary.`;
+
+  const user = {
+    role:'user',
+    content: `Brief:
+title=${brief.title}
+type=${brief.type}
+budget=${brief.budget}
+start=${brief.start}
+end=${brief.end}
+tags=${brief.tags.join(', ')}
+notes:
+${brief.notes}
+
+Current project (for context):
+${JSON.stringify({
+  title: currentProject.title,
+  type: currentProject.type,
+  budget: currentProject.budget,
+  start: currentProject.start,
+  end: currentProject.end,
+  tasks: (currentProject.tasks||[]).slice(0,20),
+  itinerary: (currentProject.itinerary||[]).slice(0,40)
+})}`
+  };
+
+  const out = await askOpenAI(
+    [
+      {role:'system', content: sys},
+      user
+    ],
+    { temperature: 0.2, json: true }
+  );
+  return JSON.parse(out);
+}
+
 /************
- * Flows    *
+ * Flows (legacy lightweight for Chat tab)
  ************/
 async function llmFlow(text){
   const sys = `Return STRICT JSON: {"title":string,"steps":[{"id":1,"title":string,"detail":string,"status":"todo"|"doing"|"done"}...],"notes":string}`;
   const out = await askOpenAI([{role:'system', content:sys},{role:'user', content:text}], {temperature:0.2, json:true});
   return JSON.parse(out);
 }
-function renderFlow(flow){
-  const wrap = $('#flowSteps'); if(!wrap) return;
-  if(!flow){ wrap.innerHTML='<div class="text-slate-500">No flow yet.</div>'; return; }
-  const steps = flow.steps?.map(s=>`
-    <div class="p-3 rounded-xl border bg-white flex gap-3 items-start border-slate-100">
-      <input type="checkbox" data-step="${s.id}" ${s.status==='done'?'checked':''} class="mt-1"/>
-      <div class="flex-1">
-        <div class="font-semibold">${ESC(s.title)}</div>
-        <div class="text-sm text-slate-600 whitespace-pre-wrap">${ESC(s.detail)}</div>
-        <div class="mt-1">
-          <select data-stat="${s.id}" class="card !py-1">
-            ${['todo','doing','done'].map(st=>`<option ${s.status===st?'selected':''}>${st}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-    </div>`).join('');
-  wrap.innerHTML = `
-    <div class="mb-2">
-      <textarea id="flowNotes" class="w-full card !py-2 mt-2" rows="2" placeholder="Notes...">${ESC(flow.notes||'')}</textarea>
-      <div class="mt-2"><button id="saveNotes" class="btn btn-ghost flex items-center gap-2"><i data-lucide="save"></i>Save Notes</button></div>
-    </div>
-    <div class="space-y-2">${steps||''}</div>`;
-  wrap.querySelectorAll('[data-step]').forEach(cb=>{
-    cb.addEventListener('change', ()=>{ const id=+cb.dataset.step; const f=JSON.parse(localStorage.getItem('FLOW_V1')||'null'); if(!f) return; const st=f.steps.find(x=>x.id===id); if(!st)return; st.status=cb.checked?'done':'todo'; localStorage.setItem('FLOW_V1', JSON.stringify(f)); renderFlow(f); });
-  });
-  wrap.querySelectorAll('[data-stat]').forEach(sel=>{
-    sel.addEventListener('change', ()=>{ const id=+sel.dataset.stat; const f=JSON.parse(localStorage.getItem('FLOW_V1')||'null'); if(!f) return; const st=f.steps.find(x=>x.id===id); if(!st)return; st.status=sel.value; localStorage.setItem('FLOW_V1', JSON.stringify(f)); });
-  });
-  $('#saveNotes')?.addEventListener('click', ()=>{ const f=JSON.parse(localStorage.getItem('FLOW_V1')||'null'); if(!f) return; f.notes=$('#flowNotes').value; localStorage.setItem('FLOW_V1', JSON.stringify(f)); alert('Saved.'); });
-  lucide.createIcons();
-}
-$('#makeFlow')?.addEventListener('click', async ()=>{
-  const text = $('#flowInput').value.trim(); if(!text) return;
-  try{ const f = await llmFlow(text); localStorage.setItem('FLOW_V1', JSON.stringify(f)); renderFlow(f); }
-  catch(e){ alert('Flows need a valid OpenAI key. Error: '+e.message); }
-});
-$('#resetFlow')?.addEventListener('click', ()=>{ localStorage.removeItem('FLOW_V1'); renderFlow(null); });
 
 /***************
  * Boot        *
@@ -747,6 +967,8 @@ $('#resetFlow')?.addEventListener('click', ()=>{ localStorage.removeItem('FLOW_V
   $('#travelDiff').value = s.travelDiff ?? 20;
   $('#homeBase').value = s.homeBase || '';
 
+  renderProjectList();
+  const pid = store.currentProjectId;
+  if(pid && getProject(pid)) loadProjectIntoUI(getProject(pid));
   renderPlanFor(store.planDay);
-  const savedFlow = JSON.parse(localStorage.getItem('FLOW_V1')||'null'); renderFlow(savedFlow);
 })();
