@@ -5,7 +5,9 @@ window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); });
 
 const $ = (s)=>document.querySelector(s);
 const $$ = (s)=>document.querySelectorAll(s);
-const ESC = (s)=> (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m]));
+
+// Hardened escape: ALWAYS coerce to string first
+const ESC = (s)=> String(s ?? '').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m]));
 
 // Timeline vertical bounds (once!)
 const START_HR = 6;  // 06:00
@@ -233,7 +235,7 @@ Rules:
 
 /* Deduplication for daily plan */
 function canonicalTitle(s){
-  return (s||'').toLowerCase().replace(/\s+/g,' ').replace(/[.,;:!?]+/g,'').trim();
+  return String(s||'').toLowerCase().replace(/\s+/g,' ').replace(/[.,;:!?]+/g,'').trim();
 }
 function timesKey(s,e){ return (s&&e) ? `${s}-${e}` : ''; }
 function dedupeMergeItems(existingItems, newItems){
@@ -266,13 +268,13 @@ function dedupeMergeItems(existingItems, newItems){
 /* Derive settings (wake/sleep) */
 function deriveSettingsFromItems(items, baseSettings){
   const s = {...baseSettings};
-  const wake = items.find(x=>/wake\s*up/i.test(x.title) && x.start);
+  const wake = items.find(x=>/wake\s*up/i.test(String(x.title)) && x.start);
   if(wake) s.earliest = wake.start;
   const sleep = items.find(x=>x.type==='rest' && x.end && !x.start);
   if(sleep) s.latest = sleep.end;
 
   const clarifications = [];
-  if(!wake && items.some(x=>/wake\s*up/i.test(x.title))) {
+  if(!wake && items.some(x=>/wake\s*up/i.test(String(x.title)))) {
     clarifications.push('What time do you want to wake up? (Using '+s.earliest+' for now)');
   }
   return {settings: s, clarifications};
@@ -286,7 +288,7 @@ function allocatePlan(baseDayIso, draft, settings){
   const travelSame = Number(settings.travelSame || 10);
   const travelDiff = Number(settings.travelDiff || 20);
 
-  const toTime = (hhmm)=>dayjs(baseDayIso + 'T' + hhmm.padStart(5,'0'));
+  const toTime = (hhmm)=>dayjs(baseDayIso + 'T' + String(hhmm||'').padStart(5,'0'));
   const startOfDay = toTime(earliest);
   const endOfDay   = toTime(latest);
 
@@ -299,7 +301,7 @@ function allocatePlan(baseDayIso, draft, settings){
     }
     let d = Number(it.duration_min)||0;
     if(it.type==='meal' && !d){
-      const t = (it.title||'').toLowerCase();
+      const t = String(it.title||'').toLowerCase();
       d = t.includes('breakfast') ? 30 : (t.includes('lunch') || t.includes('dinner')) ? 45 : 30;
     }
     flex.push({...it, duration_min: d || 30});
@@ -314,7 +316,7 @@ function allocatePlan(baseDayIso, draft, settings){
   for(const f of fixed){
     let gapStart = cursor;
     if(prevFixed){
-      const sameLoc = (prevFixed.location||'').toLowerCase() && (prevFixed.location||'').toLowerCase() === (f.location||'').toLowerCase();
+      const sameLoc = (String(prevFixed.location||'').toLowerCase()) && (String(prevFixed.location||'').toLowerCase() === String(f.location||'').toLowerCase());
       const leftBuf = sameLoc ? travelSame : travelDiff;
       if(gapStart.isBefore(prevFixed.endDT.add(leftBuf,'minute'))) gapStart = prevFixed.endDT.add(leftBuf,'minute');
     } else {
@@ -359,7 +361,7 @@ function allocatePlan(baseDayIso, draft, settings){
     const dur   = it.duration_min || (start && end ? dayjs(baseDayIso+'T'+end).diff(dayjs(baseDayIso+'T'+start),'minute') : 0);
     return { id:id++, title: it.title||'Task', type: it.type|| (start&&end?'fixed':'flexible'),
       start, end, duration_min: dur, location: it.location||'', notes: it.notes||'' };
-  }).sort((a,b)=>a.start.localeCompare(b.start));
+  }).sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')));
 
   return { day: baseDayIso, items, unplaced };
 }
@@ -392,8 +394,8 @@ function renderPlan(plan){
       <select class="col-span-2 card !py-1" data-edit="type" data-id="${it.id}">
         ${['fixed','flexible','meal','rest'].map(t=>`<option ${it.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
-      <input class="col-span-2 card !py-1" data-edit="start" data-id="${it.id}" value="${it.start}" placeholder="HH:mm"/>
-      <input class="col-span-2 card !py-1" data-edit="end" data-id="${it.id}" value="${it.end}" placeholder="HH:mm"/>
+      <input class="col-span-2 card !py-1" data-edit="start" data-id="${it.id}" value="${ESC(it.start)}" placeholder="HH:mm"/>
+      <input class="col-span-2 card !py-1" data-edit="end" data-id="${it.id}" value="${ESC(it.end)}" placeholder="HH:mm"/>
       <input class="col-span-2 card !py-1" data-edit="location" data-id="${it.id}" value="${ESC(it.location||'')}" placeholder="location"/>
       <input class="col-span-12 card !py-1" data-edit="notes" data-id="${it.id}" value="${ESC(it.notes||'')}" placeholder="notes"/>
     </div>
@@ -431,7 +433,7 @@ function renderPlan(plan){
       unp.innerHTML = `
         <div class="font-semibold text-amber-700 mb-1">Unplaced items (no room within your bounds):</div>
         <ul class="list-disc pl-5">
-          ${plan.unplaced.map(x=>`<li>${ESC(x.title)} (${x.duration_min||30}m)</li>`).join('')}
+          ${plan.unplaced.map(x=>`<li>${ESC(x.title)} (${ESC(x.duration_min||30)}m)</li>`).join('')}
         </ul>
         <div class="hint mt-2">Tip: extend your latest end, reduce min gap, or remove a task to fit these.</div>
       `;
@@ -466,7 +468,7 @@ function renderTimeline(plan){
       block.className='timeline-block';
       block.style.top = topPct+'%'; block.style.height=heightPct+'%';
       block.style.background = colorForType(it.type);
-      block.innerHTML = `<div class="font-semibold text-[13px]">${ESC(it.title)}</div><div class="opacity-90">${it.start}–${it.end}${it.location? ' • '+ESC(it.location):''}</div>`;
+      block.innerHTML = `<div class="font-semibold text-[13px]">${ESC(it.title)}</div><div class="opacity-90">${ESC(it.start)}–${ESC(it.end)}${it.location? ' • '+ESC(it.location):''}</div>`;
       tl.appendChild(block);
     }
   }
@@ -598,7 +600,8 @@ function detectBaseDay(text){
  ***********************/
 $('#newProject')?.addEventListener('click', ()=>{
   const id = 'p_' + Math.random().toString(36).slice(2,9);
-  const p = { id, title:'Untitled Project', type:'', budget:'', start:'', end:'', tags:'', brief:'', history:[], tasks:[], itinerary:[], insights:[], widgets:[], followups:[] };
+  const p = { id, title:'Untitled Project', type:'', budget:'', start:'', end:'', tags:'', brief:'', history:[], tasks:[], itinerary:[]
+            , insights:[], widgets:[], followups:[] };
   setProject(p); store.currentProjectId = id;
   renderProjectList(); loadProjectIntoUI(p);
 });
@@ -618,7 +621,7 @@ function renderProjectList(){
     <div class="p-2 rounded-lg border ${p.id===store.currentProjectId?'bg-indigo-50 border-indigo-200':'bg-white border-slate-200'} hover:bg-slate-50 cursor-pointer flex items-center justify-between" data-pid="${p.id}">
       <div>
         <div class="font-semibold">${ESC(p.title||'Untitled')}</div>
-        <div class="text-xs text-slate-500">${ESC(p.type||'')}${p.start? ' • '+p.start:''}${p.end? ' → '+p.end:''}</div>
+        <div class="text-xs text-slate-500">${ESC(p.type||'')}${p.start? ' • '+ESC(p.start):''}${p.end? ' → '+ESC(p.end):''}</div>
       </div>
       <button class="btn btn-ghost text-red-600" data-del="${p.id}"><i data-lucide="trash"></i></button>
     </div>
@@ -652,6 +655,9 @@ function clearProjectUI(){
 
 function loadProjectIntoUI(p){
   if(!p){ clearProjectUI(); return; }
+  // Sanitize before rendering (coerce types to strings where needed)
+  sanitizeProjectInPlace(p);
+
   $('#projectHeader').innerHTML = `
     <span class="pill">${ESC(p.title || 'Untitled Project')}</span>
     ${p.type? `<span class="pill">${ESC(p.type)}</span>`:''}
@@ -698,7 +704,6 @@ $('#genProject')?.addEventListener('click', async ()=>{
   })();
 
   const p = getProject(pid);
-  // Build a compact brief for the model
   const brief = {
     title: $('#projTitle').value || p.title,
     type: $('#projType').value || p.type,
@@ -711,17 +716,19 @@ $('#genProject')?.addEventListener('click', async ()=>{
 
   try{
     const res = await aiProjectPlanner(brief, p);
+    // Normalize incoming before merging
+    const projectOut = sanitizeProjectOutput(res?.project || {});
     // Merge/replace
-    p.title   = res.project.title || p.title;
-    p.type    = res.project.type  || p.type;
-    p.budget  = res.project.budget|| p.budget;
-    p.start   = res.project.start || p.start;
-    p.end     = res.project.end   || p.end;
-    p.widgets = res.project.widgets || [];
-    p.insights= res.project.insights || [];
-    p.followups = res.project.followups || [];
-    p.tasks   = mergeTasks(p.tasks, res.project.tasks || []);
-    p.itinerary = mergeItinerary(p.itinerary, res.project.itinerary || []);
+    p.title   = projectOut.title || p.title;
+    p.type    = projectOut.type  || p.type;
+    p.budget  = projectOut.budget|| p.budget;
+    p.start   = projectOut.start || p.start;
+    p.end     = projectOut.end   || p.end;
+    p.widgets = projectOut.widgets || [];
+    p.insights= projectOut.insights || [];
+    p.followups = projectOut.followups || [];
+    p.tasks   = mergeTasks(p.tasks, projectOut.tasks || []);
+    p.itinerary = mergeItinerary(p.itinerary, projectOut.itinerary || []);
     p.brief = brief.notes;
     p.history.push({ ts: Date.now(), brief });
 
@@ -735,7 +742,6 @@ $('#genProject')?.addEventListener('click', async ()=>{
 $('#syncToSchedule')?.addEventListener('click', ()=>{
   const pid = store.currentProjectId; if(!pid) return alert('Select a project first.');
   const p = getProject(pid); if(!p || !(p.itinerary||[]).length) return alert('No itinerary to sync.');
-  // For each itinerary item: add to that date's plan
   const defaults = store.settings || { earliest:'08:00', latest:'23:30', minGap:10, travelDiff:20, travelSame:10 };
   const byDate = {};
   for(const it of p.itinerary){
@@ -773,7 +779,7 @@ function renderTasks(tasks){
       <div class="flex-1">
         <div class="font-semibold">${ESC(t.title)}</div>
         <div class="text-sm text-slate-600 whitespace-pre-wrap">${ESC(t.detail||'')}</div>
-        <div class="text-xs text-slate-500 mt-1">Owner: ${ESC(t.owner||'me')} • ${ESC(t.category||'general')} • ${t.eta_min? t.eta_min+'m':''}</div>
+        <div class="text-xs text-slate-500 mt-1">Owner: ${ESC(t.owner||'me')} • ${ESC(t.category||'general')} • ${ESC(t.eta_min||'')}${t.eta_min?'m':''}</div>
       </div>
     </div>
   `).join('');
@@ -796,13 +802,13 @@ function renderItinerary(it){
   wrap.innerHTML = Object.keys(groups).sort().map(date=>{
     const rows = groups[date].map(x=>`
       <div class="grid grid-cols-12 items-center gap-2 py-1 border-b border-slate-100">
-        <div class="col-span-3">${ESC(x.start||'')} ${x.end? '– '+ESC(x.end):''}</div>
+        <div class="col-span-3">${ESC(x.start||'')}${x.end? ' – '+ESC(x.end):''}</div>
         <div class="col-span-5 font-semibold">${ESC(x.title)}</div>
         <div class="col-span-4 text-slate-600">${ESC(x.location||'')}${x.notes? ' • '+ESC(x.notes):''}</div>
       </div>
     `).join('');
     return `<div class="mb-2">
-      <div class="font-semibold">${dayjs(date).format('ddd, MMM D, YYYY')} (${date})</div>
+      <div class="font-semibold">${dayjs(date).format('ddd, MMM D, YYYY')} (${ESC(date)})</div>
       <div class="mt-1">${rows}</div>
     </div>`;
   }).join('');
@@ -820,7 +826,7 @@ function renderWidgets(w){
   wrap.innerHTML = w.map(x=>`
     <div class="p-3 rounded-xl border bg-white border-slate-200">
       <div class="text-xs text-slate-500">${ESC(x.name)}</div>
-      <div class="text-xl font-extrabold">${ESC(String(x.value))}<span class="text-sm font-semibold ml-1">${ESC(x.unit||'')}</span></div>
+      <div class="text-xl font-extrabold">${ESC(x.value)}<span class="text-sm font-semibold ml-1">${ESC(x.unit||'')}</span></div>
     </div>
   `).join('');
 }
@@ -840,7 +846,6 @@ function renderFollowups(qs){
       const ans = prompt('Your answer:'); if(!ans) return;
       const pid = store.currentProjectId; const p = getProject(pid); if(!p) return;
       p.history.push({ts:Date.now(), answer:{q:p.followups[idx], a:ans}});
-      // Append answer into brief to guide next update
       p.brief = (p.brief||'') + `\nAnswer: ${p.followups[idx]} -> ${ans}`;
       setProject(p); loadProjectIntoUI(p);
       alert('Answer saved. Click "Generate / Update Plan" to refine the project.');
@@ -851,14 +856,13 @@ function renderFollowups(qs){
 /* Merge helpers */
 function mergeTasks(existing, incoming){
   const byKey = new Map();
-  const key = (t)=> (t.title||'').toLowerCase().trim();
+  const key = (t)=> String(t.title||'').toLowerCase().trim();
   existing.forEach(t=>byKey.set(key(t), t));
   for(const t of incoming){
     const k = key(t);
     if(!byKey.has(k)){ byKey.set(k, t); continue; }
-    // merge fields
     const old = byKey.get(k);
-    old.detail = (t.detail||'').length > (old.detail||'').length ? t.detail : old.detail;
+    old.detail = (String(t.detail||'').length > String(old.detail||'').length) ? t.detail : old.detail;
     old.category = old.category || t.category;
     old.eta_min = old.eta_min || t.eta_min;
   }
@@ -866,12 +870,11 @@ function mergeTasks(existing, incoming){
 }
 function mergeItinerary(existing, incoming){
   const out = [...existing];
-  const has = (a,b)=> a.date===b.date && (a.start||'')===(b.start||'') && (a.end||'')===(b.end||'') && (a.title||'').toLowerCase().trim()===(b.title||'').toLowerCase().trim();
+  const has = (a,b)=> a.date===b.date && (a.start||'')===(b.start||'') && (a.end||'')===(b.end||'') && String(a.title||'').toLowerCase().trim()===String(b.title||'').toLowerCase().trim();
   for(const it of incoming){
     if(out.some(x=>has(x,it))) continue;
     out.push(it);
   }
-  // sort by date+time
   out.sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.start||'').localeCompare(b.start||''));
   return out;
 }
@@ -946,7 +949,60 @@ ${JSON.stringify({
 }
 
 /************
- * Flows (legacy lightweight for Chat tab)
+ * Sanitizers
+ ************/
+function sanitizeProjectOutput(pr){
+  const safeArr = (x)=> Array.isArray(x)? x : [];
+  const asStr = (x)=> String(x ?? '');
+  const asNumOrStr = (x)=> (typeof x==='number' || typeof x==='string') ? x : '';
+  const tasks = safeArr(pr.tasks).map((t,i)=>({
+    id: t?.id ?? i+1,
+    title: asStr(t?.title),
+    detail: asStr(t?.detail),
+    status: ['todo','doing','done'].includes(String(t?.status)) ? t.status : 'todo',
+    category: asStr(t?.category),
+    owner: asStr(t?.owner || 'me'),
+    eta_min: (typeof t?.eta_min==='number') ? t.eta_min : (parseInt(t?.eta_min,10) || '')
+  }));
+  const itinerary = safeArr(pr.itinerary).map(it=>({
+    date: asStr(it?.date),
+    title: asStr(it?.title),
+    start: asStr(it?.start||''),
+    end: asStr(it?.end||''),
+    duration_min: (typeof it?.duration_min==='number') ? it.duration_min :
+                  (it?.start && it?.end ? undefined : 30),
+    location: asStr(it?.location||''),
+    notes: asStr(it?.notes||'')
+  }));
+  const widgets = safeArr(pr.widgets).map(w=>({
+    name: asStr(w?.name),
+    value: asNumOrStr(w?.value),
+    unit: asStr(w?.unit||'')
+  }));
+  const insights = safeArr(pr.insights).map(asStr);
+  const followups = safeArr(pr.followups).map(asStr);
+  return {
+    title: asStr(pr.title),
+    type: asStr(pr.type),
+    budget: asStr(pr.budget),
+    start: asStr(pr.start),
+    end: asStr(pr.end),
+    widgets, insights, followups, tasks, itinerary
+  };
+}
+function sanitizeProjectInPlace(p){
+  // Coerce any arrays that might contain non-strings to strings where needed.
+  p.title = String(p.title||''); p.type=String(p.type||''); p.budget=String(p.budget||'');
+  p.start=String(p.start||''); p.end=String(p.end||''); p.tags=String(p.tags||'');
+  p.insights = (Array.isArray(p.insights)? p.insights : []).map(x=>String(x??''));
+  p.followups= (Array.isArray(p.followups)? p.followups: []).map(x=>String(x??''));
+  p.widgets  = (Array.isArray(p.widgets)? p.widgets: []).map(w=>({name:String(w?.name||''), value:(typeof w?.value==='number'||typeof w?.value==='string')? w.value : '', unit:String(w?.unit||'')}));
+  p.tasks    = (Array.isArray(p.tasks)? p.tasks: []).map((t,i)=>({ id:t?.id??(i+1), title:String(t?.title||''), detail:String(t?.detail||''), status:['todo','doing','done'].includes(String(t?.status))?t.status:'todo', category:String(t?.category||''), owner:String(t?.owner||'me'), eta_min:(typeof t?.eta_min==='number')?t.eta_min:(parseInt(t?.eta_min,10)||'') }));
+  p.itinerary= (Array.isArray(p.itinerary)? p.itinerary: []).map(it=>({ date:String(it?.date||''), title:String(it?.title||''), start:String(it?.start||''), end:String(it?.end||''), duration_min:(typeof it?.duration_min==='number')?it.duration_min:(it?.start&&it?.end?undefined:30), location:String(it?.location||''), notes:String(it?.notes||'') }));
+}
+
+/************
+ * Flows (Chat tab helper)
  ************/
 async function llmFlow(text){
   const sys = `Return STRICT JSON: {"title":string,"steps":[{"id":1,"title":string,"detail":string,"status":"todo"|"doing"|"done"}...],"notes":string}`;
