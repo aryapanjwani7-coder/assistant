@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Your Unified AI Assistant (MVP)</title>
+  <title>AI Planner • Scheduler • Projects (MVP)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Fonts + Tailwind (CDN, no build) -->
@@ -40,17 +40,19 @@
     .timeline-now { position:absolute; left:0; right:0; height:2px; background:#ef4444; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
     .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef2ff; color:#3730a3; font-weight:600; }
     .hint { font-size: 12px; color:#64748b; }
+    .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f1f5f9; color:#0f172a; font-weight:600; }
+    .kbd { background:#f1f5f9; border:1px solid #e2e8f0; border-bottom-width:3px; padding:2px 6px; border-radius:6px; font-size:12px; }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-emerald-50">
-  <div class="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+  <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
     <!-- Header -->
     <header class="glass card flex flex-col md:flex-row md:items-center md:justify-between gap-3">
       <div class="flex items-center gap-3">
         <div class="rounded-xl p-2 bg-white shadow-sm"><i data-lucide="bot" class="w-6 h-6 text-indigo-600"></i></div>
         <div>
-          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Unified AI Assistant (MVP)</h1>
-          <p class="text-sm text-slate-500">Chat • Plan • Flows — AI-first scheduling</p>
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">AI Planner • Scheduler • Projects</h1>
+          <p class="text-sm text-slate-500">Chat • Plan • Projects with insights — AI-first</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -66,20 +68,78 @@
 
     <!-- Tabs -->
     <nav class="glass card flex gap-2">
-      <button data-tab="chat"  class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="message-circle"></i>Chat</button>
-      <button data-tab="plan"  class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="calendar"></i>Plan</button>
-      <button data-tab="flows" class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="list-todo"></i>Flows</button>
+      <button data-tab="projects" class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="folder-kanban"></i>Projects</button>
+      <button data-tab="plan"      class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="calendar"></i>Plan</button>
+      <button data-tab="chat"      class="tab btn btn-ghost flex items-center gap-2"><i data-lucide="message-circle"></i>Chat</button>
     </nav>
 
-    <!-- Chat -->
-    <section id="chat" class="glass card space-y-3 hidden">
-      <div class="flex items-center justify-between">
-        <h2 class="text-xl font-semibold">General Knowledge & Conversation</h2>
-      </div>
-      <div id="chatLog" class="bg-white/70 rounded-xl p-3 h-80 overflow-auto text-sm space-y-3 border border-slate-100"></div>
-      <div class="flex gap-2">
-        <textarea id="chatInput" class="flex-1 card" rows="2" placeholder="Ask anything..."></textarea>
-        <button id="sendChat" class="btn btn-primary flex items-center gap-2"><i data-lucide="send"></i>Send</button>
+    <!-- Projects -->
+    <section id="projects" class="glass card hidden">
+      <div class="grid md:grid-cols-3 gap-4">
+        <!-- Projects list -->
+        <aside class="space-y-2">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold flex items-center gap-2"><i data-lucide="folder"></i> Your Projects</h2>
+            <button id="newProject" class="btn btn-primary flex items-center gap-2"><i data-lucide="plus"></i>New</button>
+          </div>
+          <div id="projectList" class="bg-white rounded-xl border border-slate-100 p-2 h-[520px] overflow-auto"></div>
+        </aside>
+
+        <!-- Project workspace -->
+        <main class="md:col-span-2 space-y-3">
+          <div id="projectHeader" class="flex flex-wrap items-center gap-2">
+            <span class="pill">No project selected</span>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-4">
+            <!-- Center: brief + AI actions -->
+            <div class="md:col-span-2 space-y-2">
+              <div class="card">
+                <div class="grid md:grid-cols-3 gap-2 mb-2">
+                  <input id="projTitle" class="card !py-2" placeholder="Project title (e.g., Dubai Trip)">
+                  <input id="projType" class="card !py-2" placeholder="Type (trip, event, study...)">
+                  <input id="projBudget" class="card !py-2" placeholder="Budget (e.g., 3000 USD)">
+                  <input id="projStart" class="card !py-2" placeholder="Start date (YYYY-MM-DD)">
+                  <input id="projEnd" class="card !py-2" placeholder="End date (YYYY-MM-DD)">
+                  <input id="projTags" class="card !py-2" placeholder="Tags (comma separated)">
+                </div>
+                <textarea id="projBrief" class="w-full card" rows="6" placeholder="Describe the project or paste your itinerary/notes. The AI will propose a taskflow, itinerary, and insights."></textarea>
+                <div class="flex gap-2 mt-2">
+                  <button id="genProject" class="btn btn-primary flex items-center gap-2"><i data-lucide="sparkles"></i>Generate / Update Plan</button>
+                  <button id="clearProject" class="btn btn-ghost flex items-center gap-2"><i data-lucide="trash-2"></i>Clear</button>
+                  <button id="syncToSchedule" class="btn btn-ghost flex items-center gap-2"><i data-lucide="calendar-plus"></i>Sync Itinerary → Schedule</button>
+                </div>
+              </div>
+
+              <div id="projOutputs" class="space-y-3">
+                <div class="card">
+                  <h3 class="font-semibold flex items-center gap-2"><i data-lucide="route"></i>Task Flow</h3>
+                  <div id="projTasks" class="text-sm mt-2"></div>
+                </div>
+                <div class="card">
+                  <h3 class="font-semibold flex items-center gap-2"><i data-lucide="map"></i>Itinerary</h3>
+                  <div id="projItin" class="text-sm mt-2"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: insights + widgets -->
+            <div class="space-y-3">
+              <div class="card">
+                <h3 class="font-semibold flex items-center gap-2"><i data-lucide="lightbulb"></i>Insights</h3>
+                <div id="projInsights" class="text-sm mt-2"></div>
+              </div>
+              <div class="card">
+                <h3 class="font-semibold flex items-center gap-2"><i data-lucide="gauge"></i>Widgets</h3>
+                <div id="projWidgets" class="text-sm mt-2 grid grid-cols-2 gap-2"></div>
+              </div>
+              <div class="card">
+                <h3 class="font-semibold flex items-center gap-2"><i data-lucide="help-circle"></i>Follow-ups</h3>
+                <div id="projFollowups" class="text-sm mt-2"></div>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     </section>
 
@@ -87,7 +147,7 @@
     <section id="plan" class="glass card space-y-4 hidden">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <h2 class="text-xl font-semibold">Smart Scheduling & Daily Planning</h2>
+          <h2 class="text-xl font-semibold">Smart Scheduling</h2>
           <span id="planDayBadge" class="badge"></span>
         </div>
         <div class="flex gap-2">
@@ -97,24 +157,22 @@
       </div>
 
       <div class="grid md:grid-cols-3 gap-4">
-        <!-- Inputs -->
         <div class="md:col-span-2 space-y-2">
           <div class="text-sm text-slate-700">
             <div class="font-semibold mb-1">Type naturally — AI will interpret it:</div>
             <ul class="list-disc pl-5 space-y-1">
               <li>tomorrow I'll have breakfast from 9-9:50am with Kobe at De Neve</li>
-              <li>physics 9–11 in Boelter 3400; lunch w/ Maya ~1 for 45m; meditate; cut nails (10m); sleep by 11; wake up 7:30</li>
+              <li>physics 9–11; lunch ~1 for 45m; meditate; cut nails (10m); sleep by 11; wake up</li>
             </ul>
           </div>
-          <textarea id="planInput" class="w-full card" rows="6" placeholder="Describe your day, even messily…"></textarea>
+          <textarea id="planInput" class="w-full card" rows="6" placeholder="Describe your day…"></textarea>
           <div class="flex flex-wrap gap-2 items-center">
             <button id="makePlan" class="btn btn-primary flex items-center gap-2"><i data-lucide="sparkles"></i>Make / Update Plan</button>
             <button id="resetPlan" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset Day</button>
-            <span class="hint">Tip: re-run “Make / Update Plan” to append new items; duplicates are ignored.</span>
+            <span class="hint">Flexible items are buffered and won’t be shoved at the start.</span>
           </div>
         </div>
 
-        <!-- Settings / Assumptions -->
         <div class="space-y-2">
           <h3 class="font-semibold flex items-center gap-2"><i data-lucide="settings"></i>Assumptions & Buffers</h3>
           <div class="card space-y-2">
@@ -144,7 +202,6 @@
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
-        <!-- Timeline (left) -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
             <h3 class="font-semibold flex items-center gap-2"><i data-lucide="clock-8"></i>Timeline</h3>
@@ -159,29 +216,24 @@
             <div id="timeline" class="relative h-[520px] overflow-hidden"></div>
           </div>
         </div>
-
-        <!-- List (right) -->
         <div class="space-y-2">
           <h3 class="font-semibold flex items-center gap-2"><i data-lucide="table"></i>Schedule List (editable)</h3>
           <div id="planTable" class="bg-white rounded-xl p-3 text-sm border border-slate-100"></div>
           <div id="unplaced" class="bg-white rounded-xl p-3 text-sm border border-amber-200"></div>
         </div>
       </div>
-
-      <p class="text-xs text-slate-500">
-        Any item with start & end keeps that time (even meals). Flexible tasks are auto-placed into gaps **after** your earliest start and with buffers.
-      </p>
     </section>
 
-    <!-- Flows -->
-    <section id="flows" class="glass card space-y-4 hidden">
-      <h2 class="text-xl font-semibold">Task-Flow Assistant</h2>
-      <textarea id="flowInput" class="w-full card" rows="3" placeholder="Describe your goal..."></textarea>
-      <div class="flex gap-2">
-        <button id="makeFlow" class="btn btn-primary flex items-center gap-2"><i data-lucide="waypoints"></i>Create / Update Flow</button>
-        <button id="resetFlow" class="btn btn-ghost flex items-center gap-2"><i data-lucide="rotate-ccw"></i>Reset Flow</button>
+    <!-- Chat -->
+    <section id="chat" class="glass card space-y-3 hidden">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">General Knowledge & Conversation</h2>
       </div>
-      <div id="flowSteps" class="space-y-2"></div>
+      <div id="chatLog" class="bg-white/70 rounded-xl p-3 h-80 overflow-auto text-sm space-y-3 border border-slate-100"></div>
+      <div class="flex gap-2">
+        <textarea id="chatInput" class="flex-1 card" rows="2" placeholder="Ask anything..."></textarea>
+        <button id="sendChat" class="btn btn-primary flex items-center gap-2"><i data-lucide="send"></i>Send</button>
+      </div>
     </section>
 
     <footer class="text-xs text-slate-500 text-center py-4">
