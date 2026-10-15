@@ -1,0 +1,347 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="node_modules/katex/dist/katex.min.css">
+<style>
+@page { size: A4; margin: 0; }
+:root{
+  --c1:#007f7f; --c1b:#e6f6f6;   /* density */
+  --c2:#1f5fbf; --c2b:#e9f0fc;   /* flow */
+  --c3:#7a1fa2; --c3b:#f4e9f9;   /* U(x) */
+  --c4:#c4161c; --c4b:#fdeceb;   /* damped */
+  --c5:#c45a00; --c5b:#fff1e3;   /* standing */
+  --c6:#3d4a5c; --c6b:#eef1f5;   /* beyond */
+  --c7:#1d6b2f; --c7b:#eaf6ec;   /* math */
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#fff}
+body{font-family:Carlito, 'Liberation Sans', sans-serif; font-size:var(--fs,5.7pt); line-height:1.13; color:#111; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+.page{width:210mm;height:296.4mm;padding:2.6mm 2.6mm 2.2mm 2.6mm;display:flex;flex-direction:column;overflow:hidden}
+.top{display:flex;align-items:center;gap:1.5mm;margin-bottom:1mm;border-bottom:0.8pt solid #222;padding-bottom:0.6mm}
+.top .ttl{font-size:9.5pt;font-weight:bold;letter-spacing:0.2pt;white-space:nowrap}
+.top .chips{display:flex;gap:0.8mm;flex-wrap:wrap}
+.chip{color:#fff;border-radius:1mm;padding:0.1mm 1mm;font-weight:bold;font-size:5.4pt;white-space:nowrap}
+.top .strat{font-size:5.1pt;margin-left:auto;text-align:right;line-height:1.1}
+.grid{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;grid-template-rows:auto 1fr;gap:1.1mm;min-height:0}
+.col{display:flex;flex-direction:column;gap:0.7mm;min-height:0;overflow:hidden}
+#cA{grid-column:1;grid-row:1/3}
+#cW{grid-column:2/4;grid-row:1}
+#cB{grid-column:2;grid-row:2}
+#cC{grid-column:3;grid-row:2}
+#cD{grid-column:4;grid-row:1/3}
+.sec{flex-shrink:0;border:0.7pt solid var(--c);border-radius:1.2mm;background:#fff;overflow:hidden}
+.sec>h2{margin:0;background:var(--c);color:#fff;font-size:6.6pt;padding:0.25mm 1mm;line-height:1.15;display:flex;justify-content:space-between;align-items:baseline}
+.sec>h2 small{font-weight:normal;font-size:4.9pt;opacity:0.95}
+.bd{padding:0.4mm 0.9mm 0.5mm 0.9mm}
+h3{margin:0.5mm 0 0.2mm 0;font-size:5.9pt;color:var(--c);border-bottom:0.35pt solid var(--c);line-height:1.1}
+h3:first-child{margin-top:0}
+p{margin:0.15mm 0}
+ul,ol{margin:0.1mm 0;padding-left:2.6mm}
+li{margin:0}
+.box{background:var(--cb);border-left:1.1pt solid var(--c);padding:0.25mm 0.7mm;margin:0.35mm 0;border-radius:0.6mm}
+.key{border:0.6pt solid var(--c);background:#fff;padding:0.15mm 0.6mm;border-radius:0.6mm;display:inline-block}
+.warn{background:#fff6cc;border-left:1.1pt solid #d4a300;padding:0.2mm 0.7mm;margin:0.35mm 0;border-radius:0.6mm}
+.star{background:#f3f3f3;border-left:1.1pt dashed #888;padding:0.2mm 0.7mm;margin:0.35mm 0;border-radius:0.6mm}
+.c{color:var(--c);font-weight:bold}
+.r{color:#c4161c;font-weight:bold}
+.g{color:#1d8f3a;font-weight:bold}
+.bl{color:#1f5fbf;font-weight:bold}
+.mut{color:#555}
+.eq{text-align:center;margin:0.25mm 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0.9mm}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.9mm}
+.panel{border:0.5pt solid #ddd;border-radius:0.8mm;padding:0.3mm 0.6mm;background:#fff}
+.panel>h4{margin:0 0 0.2mm 0;font-size:5.8pt;padding:0.1mm 0.5mm;border-radius:0.5mm;color:#fff}
+table{border-collapse:collapse;width:100%}
+td,th{border:0.4pt solid #bbb;padding:0.15mm 0.5mm;vertical-align:middle;text-align:left}
+th{background:#f0f0f0;font-size:5.6pt}
+.katex{font-size:1.06em}
+.katex-display{margin:0.2mm 0}
+.katex-display>.katex{font-size:1.06em}
+svg{width:100%;display:block}
+.fig{margin:0.3mm 0}
+.s{font-size:0.92em}
+.step{counter-increment:st}
+ol.steps{padding-left:2.9mm}
+ol.steps>li::marker{font-weight:bold;color:var(--c)}
+.tight li{margin:0}
+.flex{display:flex;gap:0.8mm;align-items:center}
+</style></head>
+<body><div class="page">
+
+<div class="top">
+  <div class="ttl">PHYSICS 1B · MIDTERM 1 CHEATSHEET</div>
+  <div class="chips">
+    <span class="chip" style="background:var(--c1)">① Measuring density</span>
+    <span class="chip" style="background:var(--c2)">② Flow rate &amp; Bernoulli</span>
+    <span class="chip" style="background:var(--c3)">③ U(x) &amp; equilibrium</span>
+    <span class="chip" style="background:var(--c4)">④ Damped (+driven) oscillations</span>
+    <span class="chip" style="background:var(--c5)">⑤ Standing waves</span>
+    <span class="chip" style="background:var(--c6)">★ Other ch.1–3</span>
+    <span class="chip" style="background:var(--c7)">∑ Math</span>
+  </div>
+  <div class="strat"><b>5 Qs · 100 min ≈ 20 min each.</b> Hard one? Skip and come back. Write the law/ODE first, <b>label every middle step</b> (rubric),<br>explain your logic in words, box the answer, then <b>check limits</b> (b→0, ρ<sub>air</sub>→0, A₁=A₂) and <b>units</b>. No calculator, so answers can stay symbolic.</div>
+</div>
+
+<div class="grid">
+
+<!-- ================= COLUMN A ================= -->
+<div class="col" id="cA">
+
+<div class="sec" style="--c:var(--c1);--cb:var(--c1b)">
+<h2>① MEASURING DENSITY · BUOYANCY <small>review p.2 · ch.1</small></h2>
+<div class="bd">
+<h3>Fluid statics basics</h3>
+<p>\(\rho=\frac{m}{V}\), \(P=\frac{F}{A}\) (Pa = N/m²). At rest: <span class="key">\(P=P_0+\rho g h\)</span>. Depends <b>only on depth</b>, not on container shape. Gauge \(=P-P_{atm}\).</p>
+<p><b>Pascal:</b> a pressure change spreads to the whole fluid. Hydraulic lift: \(\frac{F_1}{A_1}=\frac{F_2}{A_2}\) but \(d_2=d_1\frac{A_1}{A_2}\), so work in = work out.</p>
+<p><b>Archimedes:</b> <span class="key">\(F_B=\rho_{fl}V_{disp}\,g\)</span> = weight of displaced fluid. Where it comes from: \(F_B=(P_{bot}-P_{top})A=\rho_{fl} g h A\). It does <b>not</b> depend on depth or on what the object is made of.</p>
+<h3>Weighing method (lecture: air vs. submerged)</h3>
+<div class="box">
+<b>(a) in air:</b> \(T=w=\rho_{obj}V_{obj}\,g\) &nbsp; <b>(b) submerged</b> (\(V_{disp}=V_{obj}\)): \(T=w_{app}=w-F_B\)<br>
+\(\Rightarrow F_B=w-w_{app}=\rho_{fl}V g\). Divide (a)/(this):
+<div class="eq"><span class="key">\(\dfrac{\rho_{obj}}{\rho_{fl}}=\dfrac{w}{w-w_{app}}\)</span> &nbsp; also \(V=\dfrac{w-w_{app}}{\rho_{fl}g}\)</div>
+Unknown liquid: weigh one object in water and in the liquid: \(\frac{\rho_{liq}}{\rho_{w}}=\frac{w-w_{app,liq}}{w-w_{app,w}}\).
+</div>
+<div class="box" style="--cb:#fff3f3;--c:#c4161c">
+<b>★ His slide question: "What if we DON'T ignore air density?"</b> Air also buoys the object:<br>
+\(w_{air}=(\rho_{obj}-\rho_{air})Vg\), &nbsp; \(w_{liq}=(\rho_{obj}-\rho_{fl})Vg\)<br>
+Subtract: \(w_{air}-w_{liq}=(\rho_{fl}-\rho_{air})Vg\). Divide:
+\(\dfrac{\rho_{obj}-\rho_{air}}{\rho_{fl}-\rho_{air}}=\dfrac{w_{air}}{w_{air}-w_{liq}}\)
+<div class="eq"><span class="key">\(\rho_{obj}=\rho_{air}+(\rho_{fl}-\rho_{air})\dfrac{w_{air}}{w_{air}-w_{liq}}\)</span></div>
+Check: \(\rho_{air}\!\to\!0\) gives the lecture result. Error \(=\rho_{air}(1-\tfrac{w}{w-w_{app}})<0\), so ignoring air slightly <b>overestimates</b> \(\rho_{obj}\). It's tiny, since \(\rho_{air}\approx1.2\) vs \(\rho_w=1000\) kg/m³ (~0.1%).
+</div>
+<h3>Floating &amp; FBD tricks</h3>
+<ul>
+<li>Floats: \(F_B=w \Rightarrow \frac{V_{sub}}{V}=\frac{\rho_{obj}}{\rho_{fl}}\) (ice 0.92, so ~90% of an iceberg is under). Sinks iff \(\rho_{avg}>\rho_{fl}\). Hollow: \(\rho_{avg}=m_{tot}/V_{tot}\). Two layers: \(\rho_{obj}V=\rho_1V_1+\rho_2V_2\).</li>
+<li>Object hung in a beaker on a scale: \(T+F_B=mg\). The scale reads \(W_{beaker+water}+F_B\) (Newton's 3rd law: object pushes the water down).</li>
+<li>Melting ice: level unchanged. Rock tossed from boat: level <b>falls</b>.</li>
+</ul>
+</div></div>
+
+<div class="sec" style="--c:var(--c2);--cb:var(--c2b)">
+<h2>② FLOW RATE · CONTINUITY · BERNOULLI <small>review p.3</small></h2>
+<div class="bd">
+<p><b>Volume flow rate</b> <span class="key">\(Q=\frac{dV}{dt}=\frac{d}{dt}(Ax)=A\frac{dx}{dt}=Av\)</span> [m³/s]. Mass flow \(\dot m=\rho Av\).</p>
+<p><b>Continuity</b> (incompressible): <span class="key">\(Q_1=Q_2\Rightarrow A_1v_1=A_2v_2\)</span> for any points 1, 2. \(v\propto 1/A\propto 1/d^2\): halve d gives 4× v. Branches: \(Q_{in}=\sum Q_{out}\).</p>
+<div class="box"><b>Bernoulli</b> (incompressible, frictionless/non-viscous, steady, along a streamline):
+<div class="eq"><span class="key">\(P+\tfrac12\rho v^2+\rho g y=\text{const}\)</span></div>
+Each term is an energy per volume (J/m³ = Pa): pressure + KE density + PE density.</div>
+<p><b>Derivation (work–energy process):</b> push a slug \(dV\) through: \(W=P_1A_1dx_1-P_2A_2dx_2=(P_1-P_2)dV\) (continuity: \(A_1dx_1=A_2dx_2=dV\)). \(\Delta K=\tfrac12\rho dV(v_2^2-v_1^2)\), \(\Delta U=\rho dV g(y_2-y_1)\). Then \(W=\Delta K+\Delta U \Rightarrow P_1-P_2=\tfrac12\rho(v_2^2-v_1^2)+\rho g(y_2-y_1)\).</p>
+<p class="mut">Limits: v=0 gives statics \(P=P_0+\rho gh\). Same height: <b>faster means lower P</b> (Venturi).</p>
+<h3>Applications</h3>
+<ul class="tight">
+<li><b>Torricelli</b> (open tank, hole depth h, \(A_{tank}\gg A_{hole}\)): \(P_1=P_2=P_{atm}\), \(v_1\approx0\) give <span class="key">\(v=\sqrt{2gh}\)</span> (free fall). \(Q=A_h\sqrt{2gh}\). Hole at height H: range \(2\sqrt{hH}\).</li>
+<li><b>Venturi</b> (horizontal, \(A_1&gt;A_2\)): \(P_1-P_2=\tfrac12\rho v_1^2\big[(\tfrac{A_1}{A_2})^2-1\big]\). Manometer: \(P_1-P_2=(\rho_m-\rho)gh\).</li>
+<li><b>Prandtl/Pitot tube</b> (disc. wk 2): front opening 1 is a dead spot, \(v_1=0\). Side opening 2 sees air at speed \(v_2\). Bernoulli: \(P_1-P_2=\tfrac12\rho_{air}v_2^2\). U-tube: \(\rho g h=P_1-P_2\) gives <span class="key">\(h=\frac{\rho_{air}v_2^2}{2\rho g}\)</span>, so \(v_2=\sqrt{\frac{2\rho g h}{\rho_{air}}}\).</li>
+<li><b>Lift:</b> faster air on top means lower P on top: \(F\approx\tfrac12\rho(v_t^2-v_b^2)A\) (roofs in storms, curveball).</li>
+<li><b>Siphon:</b> exit speed \(\sqrt{2gd}\) (d = drop from surface to exit). Pipe rising at constant A: v is constant, so P drops by \(\rho g\Delta y\).</li>
+</ul>
+<div class="star"><b>Viscous (Bernoulli fails):</b> \(Q=\frac{\pi R^4\Delta P}{8\eta L}\) (R/2 gives Q/16). Turbulent if \(Re=\frac{\rho vD}{\eta}\gtrsim2000\).</div>
+</div></div>
+
+<div class="sec" style="--c:var(--c6);--cb:var(--c6b)">
+<h2>★ SHM &amp; PENDULUMS <small>ch.2 · disc. wk 2</small></h2>
+<div class="bd">
+<p>\(F=-kx\Rightarrow\ddot x=-\frac{k}{m}x\Rightarrow\) <span class="key">\(x=A\cos(\omega t+\phi)\)</span>, \(\omega=\sqrt{k/m}=2\pi f=\frac{2\pi}{T}\).<br>\(v=-A\omega\sin(\omega t+\phi)\), \(a=-\omega^2x\). \(v_{max}=A\omega\) (at x=0), \(a_{max}=A\omega^2\) (at ±A), \(v(x)=\pm\omega\sqrt{A^2-x^2}\).</p>
+<p><b>ICs:</b> \(A=\sqrt{x_0^2+(v_0/\omega)^2}\), \(\tan\phi=-\frac{v_0}{\omega x_0}\). <b>Energy</b> \(E=\tfrac12kA^2=\tfrac12mv^2+\tfrac12kx^2=\tfrac12mv_{max}^2\). KE = PE at \(x=A/\sqrt2\).</p>
+<p>Vertical spring: same ω, equilibrium shifted by mg/k. Springs in parallel: \(k_1+k_2\); in series: \(\frac1k=\frac1{k_1}+\frac1{k_2}\).</p>
+
+<p><b>Simple pendulum:</b> \(\tau=-mgL\sin\theta=I\alpha\), \(I=mL^2\), so \(\ddot\theta=-\frac gL\sin\theta\approx-\frac gL\theta\) (small angle). <span class="key">\(\omega=\sqrt{g/L},\ T=2\pi\sqrt{L/g}\)</span>, independent of m and A. Measure g: \(g=4\pi^2L/T^2\). For better precision: long L, time many periods, small amplitude. Clock: \(\frac{\Delta T}{T}=\frac12\frac{\Delta L}{L}\), so 2% too long means 1% slow ≈ 14.4 min/day.</p>
+<p><b>Physical pendulum</b> (d = pivot→CM): \(I\ddot\theta=-mgd\sin\theta\), so <span class="key">\(\omega=\sqrt{\frac{mgd}{I}},\ T=2\pi\sqrt{\frac{I}{mgd}}\)</span>. Rod pivoted at end: \(T=2\pi\sqrt{\frac{2L}{3g}}\).<br>
+<b>I:</b> rod (center) \(\frac{ML^2}{12}\), rod (end) \(\frac{ML^2}{3}\), hoop \(MR^2\), disk \(\frac12MR^2\), sphere \(\frac25MR^2\), shell \(\frac23MR^2\). Parallel axis: \(I=I_{cm}+Md^2\).</p>
+<p><b>Torsional:</b> \(\tau=-\kappa\theta\), \(\omega=\sqrt{\kappa/I}\), \(T=2\pi\sqrt{I/\kappa}\) (κ in N·m/rad).</p>
+</div></div>
+</div>
+
+<!-- ================= WIDE DAMPED ================= -->
+<div class="col" id="cW">
+<div class="sec" style="--c:var(--c4);--cb:var(--c4b)">
+<h2>④ DAMPED OSCILLATIONS: THE FULL PROCESS <small>review p.5 · lect. 4 · "follow the process"</small></h2>
+<div class="bd">
+<div class="two">
+<div>
+<p><b>Setup:</b> drag \(F=-bv\) (b in kg/s). Newton: \(ma=-bv-kx\), so</p>
+<div class="eq"><span class="key">\(m\ddot x+b\dot x+kx=0\)</span> (1) &nbsp;⟺&nbsp; \(\ddot x+2\gamma\dot x+\omega_0^2x=0\)</div>
+<p>\(\gamma\equiv\frac{b}{2m}\) (decay rate, 1/s), \(\omega_0\equiv\sqrt{\frac{k}{m}}\) (natural ang. freq.). Damping ratio \(\zeta=\frac{\gamma}{\omega_0}=\frac{b}{2\sqrt{mk}}\).</p>
+<p><b>Which case?</b> Compare <span class="key">\(b^2\) vs \(4mk\)</span> ⟺ \(\gamma\) vs \(\omega_0\) ⟺ \(b\) vs \(2\sqrt{mk}\).</p>
+</div>
+<div class="fig">%%DAMP%%</div>
+</div>
+<table>
+<tr><th></th><th style="color:#1f5fbf">UNDERDAMPED \(b^2&lt;4mk\)</th><th style="color:#c4161c">CRITICAL \(b^2=4mk\)</th><th style="color:#1d8f3a">OVERDAMPED \(b^2&gt;4mk\)</th></tr>
+<tr><td><b>roots</b></td><td>complex: \(\gamma\pm i\omega\)</td><td>repeated: \(r=\gamma\)</td><td>2 real: \(r_{1,2}=\gamma\pm\alpha\)</td></tr>
+<tr><td><b>x(t)</b></td><td>\(A_0e^{-bt/2m}\cos(\omega t+\phi)\)</td><td>\((A+Bt)\,e^{-\gamma t}\)</td><td>\(C_1e^{-r_1t}+C_2e^{-r_2t}\)</td></tr>
+<tr><td><b>freq.</b></td><td>\(\omega=\sqrt{\frac{k}{m}-\frac{b^2}{4m^2}}=\sqrt{\omega_0^2-\gamma^2}&lt;\omega_0\)</td><td>\(\omega=0\): no oscillation!</td><td>\(\alpha=\frac{\sqrt{b^2-4mk}}{2m}=\sqrt{\gamma^2-\omega_0^2}\)</td></tr>
+<tr><td><b>motion</b></td><td>oscillates in a decaying envelope \(\pm A_0e^{-\gamma t}\); ∞ zero crossings; \(T_d=2\pi/\omega&gt;T_0\)</td><td><b>quickest</b> return to equilibrium with no overshoot (≤1 crossing)</td><td>slow creep back ("too much resistance"), ≤1 crossing; late-time \(\sim e^{-(\gamma-\alpha)t}\)</td></tr>
+<tr><td><b>e.g.</b></td><td>guitar string, swing, small b</td><td>car shocks, door closer, meter needle</td><td>mass in honey, very stiff damper</td></tr>
+</table>
+
+<div class="three" style="margin-top:0.5mm">
+<div class="panel"><h4 style="background:#1f5fbf">A · UNDERDAMPED derivation (lecture)</h4>
+<ol class="steps" style="--c:#1f5fbf">
+<li><b>Try</b> \(x=A_0e^{-rt}\cos(\omega t+\phi)\). Let \(\theta=\omega t+\phi\).</li>
+<li>\(\dot x=-A_0e^{-rt}(r\cos\theta+\omega\sin\theta)\)</li>
+<li>\(\ddot x=A_0e^{-rt}[(r^2-\omega^2)\cos\theta+2r\omega\sin\theta]\)</li>
+<li><b>Plug into (1):</b> \(A_0e^{-rt}\{[m(r^2-\omega^2)-br+k]\cos\theta\) \(+(2mr-b)\,\omega\sin\theta\}=0\)</li>
+<li>True for <b>all t</b>, and cos θ, sin θ are independent, so <b>each coefficient = 0</b>:<br>
+\(\sin\theta\): \(2mr-b=0\Rightarrow\) <span class="key">\(r=\frac{b}{2m}\)</span><br>
+\(\cos\theta\): \(m(r^2-\omega^2)-br+k=0\) (2)</li>
+<li>Put r into (2): <span class="key">\(\omega^2=\frac{k}{m}-\frac{b^2}{4m^2}\)</span>. ω is real only if \(b^2&lt;4mk\).</li>
+<li>\(x=\underbrace{A_0e^{-bt/2m}}_{\text{decaying amp.}}\underbrace{\cos(\omega t+\phi)}_{\text{oscillation}}\). Check b→0: SHM ✓.</li>
+</ol></div>
+<div class="panel"><h4 style="background:#1d8f3a">B · OVERDAMPED derivation (lecture)</h4>
+<ol class="steps" style="--c:#1d8f3a">
+<li><b>Try</b> \(x=A_0e^{-rt}\): \(\dot x=-rx\), \(\ddot x=r^2x\).</li>
+<li><b>Plug in:</b> \((mr^2-br+k)A_0e^{-rt}=0\) <span class="mut">(slide typo "kr")</span><br>so \(mr^2-br+k=0\)</li>
+<li>Quadratic formula: <span class="key">\(r=\frac{b\pm\sqrt{b^2-4mk}}{2m}=\gamma\pm\alpha\)</span></li>
+<li>\(b^2&gt;4mk\) gives two real roots \(r_1=\gamma+\alpha\) (fast), \(r_2=\gamma-\alpha\) (slow, dominates at late t). Both \(&gt;0\) since \(\alpha&lt;\gamma\), so x always decays.</li>
+<li>Linear ODE, so superpose: <span class="key">\(x=C_1e^{-r_1t}+C_2e^{-r_2t}\)</span>. \(r_1,r_2\) are the <b>two decay time scales</b> \(1/r_1,1/r_2\).</li>
+<li>Same thing: \(x=e^{-\gamma t}[C_1e^{-\alpha t}+C_2e^{\alpha t}]\) \(=e^{-\gamma t}[A\cosh\alpha t+B\frac{\sinh\alpha t}{\alpha}]\), with \(A=C_1+C_2\), \(B=\alpha(C_2-C_1)\).</li>
+</ol></div>
+<div class="panel"><h4 style="background:#c4161c">C · CRITICAL (b²=4mk): "Not exactly!"</h4>
+<ol class="steps" style="--c:#c4161c">
+<li>\(r_1=r_2=r\), so \((C_1+C_2)e^{-rt}\) has <b>only one constant</b>. It can't match both x₀ and v₀, so we need a 2nd solution.</li>
+<li><b>From over:</b> α→0 gives \(\cosh\alpha t\to1\), \(\frac{\sinh\alpha t}{\alpha}\to t\)</li>
+<li><b>From under:</b> \(x=e^{-\gamma t}[A\cos\omega t+B\frac{\sin\omega t}{\omega}]\), ω→0 gives \(\cos\omega t\to1\), \(\frac{\sin\omega t}{\omega}\to t\) <span class="mut">(slide typo "sinh/α")</span></li>
+<li>Both give <span class="key">\(x=(A+Bt)e^{-\gamma t}\)</span>, \(\gamma=\frac{b}{2m}=\sqrt{\frac{k}{m}}\)</li>
+<li><b>Verify</b> \(te^{-\gamma t}\): \(\dot x=(1-\gamma t)e^{-\gamma t}\), \(\ddot x=(\gamma^2t-2\gamma)e^{-\gamma t}\), so \(\ddot x+2\gamma\dot x+\gamma^2x\) \(=e^{-\gamma t}[\gamma^2t-2\gamma+2\gamma-2\gamma^2t+\gamma^2t]=0\) ✓</li>
+</ol></div>
+</div>
+
+<div class="two" style="margin-top:0.4mm">
+<div class="box" style="margin:0"><b>Initial conditions: one master pattern.</b> \(x(0)=x_0,\ \dot x(0)=v_0\). Let <span class="key">\(B\equiv v_0+\gamma x_0\)</span>.<br>
+<span class="bl">Under:</span> \(x=e^{-\gamma t}\big[x_0\cos\omega t+\frac{B}{\omega}\sin\omega t\big]\)<br>
+<span class="r">Critical:</span> \(x=e^{-\gamma t}\big[x_0+B\,t\big]\)<br>
+<span class="g">Over:</span> \(x=e^{-\gamma t}\big[x_0\cosh\alpha t+\frac{B}{\alpha}\sinh\alpha t\big]\)<br>
+<span class="s"><b>Why</b> (lecture): \(x=e^{-\gamma t}[C\cos\omega t+D\sin\omega t]\). At t=0, \(C=x_0\). \(v(0)=-\gamma C+\omega D\Rightarrow D=\frac{v_0+\gamma x_0}{\omega}\), so D = (const)/ω and the ω→0 limit is finite. From rest (\(v_0=0\)): \(B=\gamma x_0\), e.g. critical \(x=x_0(1+\gamma t)e^{-\gamma t}\).</span></div>
+<div class="box" style="margin:0">
+<b>Amp–phase form</b> (under): \(A_0=\sqrt{x_0^2+(B/\omega)^2}\), \(\tan\phi=-\frac{B}{\omega x_0}\).<br>
+<b>Over, direct:</b> \(C_1+C_2=x_0\), \(-r_1C_1-r_2C_2=v_0\), so \(C_1=-\frac{v_0+r_2x_0}{r_1-r_2}\), \(C_2=\frac{v_0+r_1x_0}{r_1-r_2}\).<br>
+<b>Trend as b grows:</b> ω falls and decay speeds up until critical. Past critical, return gets <b>slower</b>: \(r_2=\gamma-\alpha\to\frac{\omega_0^2}{2\gamma}=\frac{k}{b}\to0\). So critical is the fastest.<br>
+<b>Any oscillator:</b> swap in its \(\omega_0^2\) (g/L, mgd/I, κ/I) and \(2\gamma\) (= b/m).
+</div>
+</div>
+</div></div>
+</div>
+
+<!-- ================= COLUMN B (under wide) ================= -->
+<div class="col" id="cB">
+<div class="sec" style="--c:var(--c4);--cb:var(--c4b)">
+<h2>④ cont. · ENERGY · Q · DRIVEN <small>disc. wk 3 · lect. 4 p.5</small></h2>
+<div class="bd">
+<h3>Energy loss</h3>
+<p>\(E=\tfrac12m\dot x^2+\tfrac12kx^2\). Then \(\frac{dE}{dt}=\dot x(m\ddot x+kx)=\dot x(-b\dot x)\), so <span class="key">\(\frac{dE}{dt}=-b\dot x^2\le0\)</span></p>
+<p><b>Weak damping</b> (γ≪ω₀): \(E\approx\tfrac12kA_0^2e^{-2\gamma t}=E_0e^{-bt/m}\). <b>Energy decays twice as fast as amplitude</b>: \(\tau_E=\frac{m}{b}\), \(\tau_A=\frac{2m}{b}\).</p>
+<div class="box"><b>Disc. wk 3, E(t) for the CRITICAL case:</b> \(x=e^{-\alpha t}(A_0+A_1t)\), α = b/2m.<br>
+\(\dot x=e^{-\alpha t}[-\alpha(A_0+A_1t)+A_1]\). Critical means \(\alpha^2=\frac{k}{m}\), so \(E=\tfrac12m(\dot x^2+\alpha^2x^2)\):
+<div class="eq">\(E=\tfrac12m\,e^{-2\alpha t}\big[2\alpha^2(A_0+A_1t)^2+A_1^2-2\alpha A_1(A_0+A_1t)\big]\)</div></div>
+<p><b>Quality factor</b> \(Q=\frac{\omega_0}{2\gamma}=\frac{m\omega_0}{b}=\frac{\sqrt{mk}}{b}\approx2\pi\frac{E}{|\Delta E|_{cycle}}\). Critical: Q = ½. <b>Log decrement</b> \(\ln\frac{x(t)}{x(t+T_d)}=\gamma T_d\). Amplitude halves at \(t=\frac{2m\ln2}{b}\).</p>
+<h3>Driven (forced) oscillator</h3>
+<p><span class="key">\(m\ddot x+b\dot x+kx=F_0\cos\omega t\)</span>. x = <b>transient</b> (the damped solution, dies out) + <b>steady state</b> \(A\cos(\omega t-\delta)\). It ends up oscillating at the <b>driving</b> ω, not ω₀.</p>
+<ol class="steps tight" style="--c:var(--c4)">
+<li>\(\theta=\omega t-\delta\): \(x=A\cos\theta\), \(\dot x=-A\omega\sin\theta\), \(\ddot x=-A\omega^2\cos\theta\)</li>
+<li>Plug in: \(A(k-m\omega^2)\cos\theta-bA\omega\sin\theta=F_0\cos\omega t\)</li>
+<li>Expand: \(\cos\theta=\cos\omega t\cos\delta+\sin\omega t\sin\delta\), \(\sin\theta=\sin\omega t\cos\delta-\cos\omega t\sin\delta\)</li>
+<li>No sin ωt on the RHS: \((k-m\omega^2)\sin\delta-b\omega\cos\delta=0\) gives <span class="key">\(\tan\delta=\frac{b\omega}{k-m\omega^2}\)</span> (phase lag)</li>
+<li>cos ωt: \(A[(k-m\omega^2)\cos\delta+b\omega\sin\delta]=F_0\). Use \(\sin\delta=\frac{b\omega}{D}\), \(\cos\delta=\frac{k-m\omega^2}{D}\):</li>
+</ol>
+<div class="eq"><span class="key">\(A=\dfrac{F_0}{\sqrt{(k-m\omega^2)^2+(b\omega)^2}}\)</span>\(=\dfrac{F_0/m}{\sqrt{(\omega_0^2-\omega^2)^2+4\gamma^2\omega^2}}\)</div>
+<div class="flex"><div style="flex:0 0 40%">%%RES%%</div>
+<div class="s">ω→0: \(A\to F_0/k\), δ→0 (in phase).<br>ω=ω₀: \(A=\frac{F_0}{b\omega_0}\), δ=90°.<br>ω≫ω₀: \(A\to\frac{F_0}{m\omega^2}\), δ→180°.<br><b>Resonance</b> at ω≈ω₀ (exact peak \(\sqrt{\omega_0^2-2\gamma^2}\)). Smaller b gives a taller, narrower peak (width ≈ 2γ = b/m).</div></div>
+</div></div>
+<div class="sec" style="--c:var(--c5);--cb:var(--c5b)">
+<h2>⑤ cont. · REFLECTION · INTERFERENCE <small>lect. 6</small></h2>
+<div class="bd">
+<table class="s"><tr><th>boundary</th><th>reflection</th><th>phase</th><th>condition</th></tr>
+<tr><td>Fixed</td><td>inverted</td><td>180°</td><td>\(y(0,t)=0\Rightarrow y_r=-y_i\)</td></tr>
+<tr><td>Free</td><td>not inverted</td><td>0</td><td>\(F_y=-F_T\frac{\partial y}{\partial x}=0\): slope 0, so \(g(u)=f(-u)\)</td></tr></table>
+<p><b>Two media</b> (same F_T, \(v=\sqrt{F_T/\mu}\), μ↑ means v↓): light→heavy reflects <b>inverted</b> (like a fixed end); heavy→light reflects <b>upright</b>. Transmitted pulse is always upright. <span class="mut">★ \(\frac{A_r}{A_i}=\frac{v_2-v_1}{v_1+v_2}\), \(\frac{A_t}{A_i}=\frac{2v_2}{v_1+v_2}\).</span></p>
+<p><b>Superposition:</b> \(y_1=A\sin(kx-\omega t)\), \(y_2=A\sin(kx-\omega t+\phi)\) gives <span class="key">\(y=2A\cos\frac{\phi}{2}\sin(kx-\omega t+\frac{\phi}{2})\)</span>, \(A_R=2A|\cos\frac\phi2|\). φ = 0, 2π: constructive (2A). φ = π: destructive (0). Path diff Δ gives φ = 2πΔ/λ. Waves pass through each other; particles don't.</p>
+</div></div>
+</div>
+
+<!-- ================= COLUMN C (under wide) ================= -->
+<div class="col" id="cC">
+<div class="sec" style="--c:var(--c5);--cb:var(--c5b)">
+<h2>⑤ STANDING WAVES <small>review p.6 · lect. 6</small></h2>
+<div class="bd">
+<p>Two identical waves going opposite ways: \(y_1=A\sin(kx-\omega t)\), \(y_2=A\sin(kx+\omega t)\). Identity \(\sin a+\sin b=2\sin\frac{a+b}{2}\cos\frac{a-b}{2}\):</p>
+<div class="eq"><span class="key">\(y(x,t)=\underbrace{2A\sin(kx)}_{\text{amp. depends on }x}\underbrace{\cos(\omega t)}_{\text{oscillation in time}}\)</span></div>
+<p>Traveling \(A\sin(kx-\omega t)\): space and time mixed, the pattern moves. Standing: <b>space and time separate, the pattern does not propagate</b>.</p>
+<p><b>Nodes</b> (\(A_{local}=|2A\sin kx|=0\)): \(kx=n\pi\), so <span class="key">\(x_n=n\frac{\lambda}{2}\)</span>. <b>Antinodes</b> (|sin kx|=1, amp. 2A): \(x=\frac{\lambda}{4},\frac{3\lambda}{4},…\) Node–node = λ/2, node–antinode = λ/4. Points in one loop move <b>in phase</b>; neighbouring loops are opposite. The string is flat everywhere when cos ωt = 0 (all energy kinetic then).</p>
+<div class="fig">%%STAND%%</div>
+<div class="box"><b>Fixed both ends</b> (both ends nodes; only some λ fit):
+<div class="eq"><span class="key">\(\lambda_n=\frac{2L}{n},\quad f_n=\frac{nv}{2L}=\frac{n}{2L}\sqrt{\frac{F_T}{\mu}}\)</span>, n = 1, 2, 3…</div>
+n=1 is the fundamental (1st harmonic, λ = 2L). \(f_n=nf_1\). Mode n has n loops, n antinodes, n+1 nodes (incl. ends).<br>
+<b>Fixed–free</b> (free end = antinode): \(\lambda_n=\frac{4L}{n}\), \(f_n=\frac{nv}{4L}\), <b>odd n only</b>. Free–free: same as fixed–fixed.</div>
+<p><b>Guitar:</b> tuning peg \(F_T\!\uparrow\Rightarrow f\!\uparrow\) (tighter means higher pitch). Thicker string \(\mu\!\uparrow\Rightarrow f\!\downarrow\). Fret \(L\!\downarrow\Rightarrow f\!\uparrow\). Scaling \(f\propto\frac{\sqrt{F_T}}{L\sqrt\mu}\): 4×F_T gives 2×f; 4×μ gives f/2; L/2 gives 2f (octave).</p>
+<p><b>Two adjacent resonances given?</b> Fixed–fixed: \(f_1=f_{n+1}-f_n\) and \(n=f_n/f_1\). Fixed–free: the gap is \(2f_1\). <b>Wave vs. string:</b> v is set by the string (\(F_T,\mu\)); f is set by the source/mode; λ = v/f.</p>
+<h3>Energy in a standing wave</h3>
+<p><span class="key">\(u=\tfrac12\mu(\tfrac{\partial y}{\partial t})^2+\tfrac12F_T(\tfrac{\partial y}{\partial x})^2\)</span> (KE + stretch PE). For \(y=A\sin kx\cos\omega t\), using \(F_Tk^2=\mu\omega^2\) (since \(v^2=F_T/\mu=\omega^2/k^2\)):</p>
+<div class="eq">\(u=\tfrac12\mu A^2\omega^2[\sin^2\!kx\,\sin^2\!\omega t+\cos^2\!kx\,\cos^2\!\omega t]\)</div>
+<ul class="tight">
+<li><b>Node</b> (sin kx = 0): doesn't move, so KE density = 0. |cos kx| = 1, so the slope and PE density are <b>max</b>. Mostly PE.</li>
+<li><b>Antinode</b>: max displacement and max speed (at different times); slope 0.</li>
+<li>L = integer × λ/2: \(\int_0^L\sin^2kx\,dx=\int_0^L\cos^2kx\,dx=\frac L2\), so <span class="key">\(E=\tfrac14\mu A^2\omega^2L\)</span> is <b>constant in time</b> (KE and PE slosh locally).</li>
+<li>\(E_n=\tfrac14\mu LA_n^2\omega_n^2\), \(\omega_n=\frac{n\pi v}{L}\), so <b>\(E_n\propto n^2\)</b> at the same antinode amplitude.</li>
+<li>\(P_{avg}=0\): two equal and opposite traveling waves carry opposite energy fluxes. Energy is stored but not transported. Like a massive particle at rest (\(E_0=mc^2\), zero momentum); a traveling wave is like a massless one.</li>
+</ul>
+<p class="s"><b>Why PE = ½F_T(∂y/∂x)²:</b> \(ds=\sqrt{dx^2+dy^2}\approx dx[1+\tfrac12(\tfrac{\partial y}{\partial x})^2]\), extra length \(d\ell=\tfrac12(\tfrac{\partial y}{\partial x})^2dx\), work \(F_Td\ell\). PE depends on <b>local slope</b>, not height.</p>
+</div></div>
+</div>
+
+<!-- ================= COLUMN D ================= -->
+<div class="col" id="cD">
+<div class="sec" style="--c:var(--c3);--cb:var(--c3b)">
+<h2>③ POTENTIAL CURVES · EQUILIBRIUM <small>review p.4</small></h2>
+<div class="bd">
+<p><span class="key">\(F(x)=-\frac{dU}{dx}\)</span>: force points <b>downhill</b>. \(U=-\int F\,dx\).</p>
+<table class="s"><tr><th>1st deriv.</th><th>force</th><th>2nd deriv. at \(x_0\)</th><th>type</th></tr>
+<tr><td>\(U'&gt;0\)</td><td>\(F&lt;0\) ←</td><td>\(U''&gt;0\) min</td><td><b class="g">stable</b>: F points back</td></tr>
+<tr><td>\(U'&lt;0\)</td><td>\(F&gt;0\) →</td><td>\(U''&lt;0\) max</td><td><b class="r">unstable</b>: F points away</td></tr>
+<tr><td>\(U'=0\)</td><td>\(F=0\): equil.</td><td>\(U''=0\) inflection</td><td>not stable (e.g. \(x^3\))</td></tr></table>
+<div class="box"><b>Effective spring</b> \(k_{eff}=U''(x_0)=-\frac{dF}{dx}\) (cf. \(F_s=-kx\)). Taylor: \(U\approx U(x_0)+\tfrac12U''(x_0)(x-x_0)^2\), so <b>small oscillations about any minimum are SHM</b>:
+<div class="eq"><span class="key">\(\omega=\sqrt{U''(x_0)/m}\)</span>, angle coordinate: \(\omega=\sqrt{U''(\theta_0)/I}\)</div></div>
+<p><b>Energy diagram:</b> \(K=E-U(x)\ge0\), so the object is confined to \(U\le E\). <b>Turning points</b> are where \(U=E\) (v=0). Speed is max at the U minimum: \(v=\sqrt{2(E-U)/m}\).</p>
+<div class="fig">%%LJ%%</div>
+<p><b>Lennard-Jones</b> <span class="key">\(U=4\epsilon\big[(\tfrac{\sigma}{x})^{12}-(\tfrac{\sigma}{x})^{6}\big]\)</span>. The \(x^{-12}\) term is strongly repulsive (electron clouds overlap, Pauli exclusion). The \(-x^{-6}\) term is attractive (fluctuating dipoles, van der Waals).</p>
+<ul class="tight">
+<li>\(U(\sigma)=0\).&nbsp; \(\frac{dU}{dx}=4\epsilon(-12\sigma^{12}x^{-13}+6\sigma^6x^{-7})=0\) gives \(-2\sigma^6+x_0^6=0\), so <span class="key">\(x_0=2^{1/6}\sigma\approx1.12\sigma\)</span></li>
+<li>\(U(x_0)=4\epsilon(\tfrac14-\tfrac12)=-\epsilon\): well depth = binding (dissociation) energy</li>
+<li>\(U''=4\epsilon(156\tfrac{\sigma^{12}}{x^{14}}-42\tfrac{\sigma^6}{x^8})\), so \(U''(x_0)=\frac{72\epsilon}{x_0^2}=\frac{72\epsilon}{2^{1/3}\sigma^2}\approx57\frac{\epsilon}{\sigma^2}\) and \(\omega=\sqrt{\frac{72\epsilon}{\mu x_0^2}}\) (μ = reduced mass, m/2 for identical atoms)</li>
+<li>\(F=\frac{24\epsilon}{x}[2(\tfrac{\sigma}{x})^{12}-(\tfrac{\sigma}{x})^6]\): repulsive for \(x&lt;x_0\). E≥0 means unbound. Asymmetric well (anharmonic): average x grows with E, i.e. thermal expansion.</li>
+</ul>
+<p class="s"><b>Ex.</b> \(U=ax^2-bx^3\): \(U'=0\) at \(x=0\) (\(U''=2a&gt;0\), stable) and at \(x=\frac{2a}{3b}\) (\(U''=-2a\), unstable). Pendulum \(U=mgL(1-\cos\theta)\): \(U''(0)=mgL\), so \(\omega=\sqrt{mgL/mL^2}=\sqrt{g/L}\).</p>
+<div class="box"><b>Reduced mass · disc. wk 2: two masses + one spring</b> (rest length y₀). \(y=x_2-x_1\), \(F_1=k(y-y_0)\), \(F_2=-k(y-y_0)\).<br>
+\(\frac{d^2}{dt^2}(y-y_0)=\ddot x_2-\ddot x_1=\frac{F_2}{m_2}-\frac{F_1}{m_1}=-k(\tfrac1{m_1}+\tfrac1{m_2})(y-y_0)\)
+<div class="eq"><span class="key">\(\omega=\sqrt{k(\tfrac1{m_1}+\tfrac1{m_2})}=\sqrt{k/\mu}\)</span>, \(\mu=\frac{m_1m_2}{m_1+m_2}\). Check: \(m_2\to\infty\) gives \(\sqrt{k/m_1}\) ✓</div></div>
+</div></div>
+
+<div class="sec" style="--c:var(--c6);--cb:var(--c6b)">
+<h2>★ TRAVELING WAVES <small>ch.3 · lect. 5 · disc. wk 3</small></h2>
+<div class="bd">
+<p>Mechanical waves need a medium and carry <b>energy and momentum, not mass</b>. Transverse: medium moves ⊥ to propagation. Longitudinal: ∥. P-wave: longitudinal, faster, through solids and liquids. S-wave: transverse, slower, solids only.</p>
+<p><span class="key">\(y=A\sin(kx-\omega t+\phi)\)</span> moves <b>+x</b>; \(kx+\omega t\) moves −x (constant phase gives x = vt + c). \(k=\frac{2\pi}{\lambda}\), \(\omega=\frac{2\pi}{T}\), <span class="key">\(v=\frac{\lambda}{T}=\lambda f=\frac{\omega}{k}\)</span>. Any \(f(x-vt)\) works. Pulse: Δx = vΔt.</p>
+<p><b>Particle velocity</b> \(v_y=\frac{\partial y}{\partial t}=-A\omega\cos(kx-\omega t)\), max \(A\omega\) (≠ wave speed!). \(a_y=-\omega^2y\). At a crest the particle has \(v_y=0\) while the crest itself moves at v.</p>
+<p><b>Wave eq.</b> <span class="key">\(\frac{\partial^2y}{\partial x^2}=\frac1{v^2}\frac{\partial^2y}{\partial t^2}\)</span>. It's linear, so superposition holds. (A wave plus a 2ω wave going the other way still solves it with the same v, but has no single direction.)</p>
+<p><b>String speed:</b> \(F_{net,y}=F_T[(\frac{\partial y}{\partial x})_2-(\frac{\partial y}{\partial x})_1]=\mu\Delta x\frac{\partial^2y}{\partial t^2}\). Divide by \(F_T\Delta x\), let Δx→0: \(\frac{\partial^2y}{\partial x^2}=\frac{\mu}{F_T}\frac{\partial^2y}{\partial t^2}\), so <span class="key">\(v=\sqrt{F_T/\mu}\)</span>. Generally \(v=\sqrt{\frac{\text{restoring}}{\text{inertia}}}\); sound \(v=\sqrt{B/\rho}\).</p>
+<p><b>Energy/power:</b> <span class="key">\(E_\lambda=\tfrac12\mu A^2\omega^2\lambda,\ P_{avg}=\tfrac12\mu A^2\omega^2v\)</span> \(=\tfrac12\omega^2A^2\sqrt{\mu F_T}\). Scalings: 2×A gives 4×P; 2×f gives 4×P; 4×F_T gives 2×v and 2×P.<br>
+<b>Disc. wk 3:</b> 4×μ (A, ω, F_T fixed): v and λ halve, but \(E_\lambda\) and \(P\) <b>double</b> (∝√μ). 4×F_T: v and λ double, so \(E_\lambda\) and P double.<br>
+Intensity \(I=P/\text{area}\). Sphere: \(I=\frac{P}{4\pi r^2}\), so \(A\propto\frac1r\). 2D circle: \(I=\frac{P}{2\pi r}\), so \(A\propto\frac1{\sqrt r}\).</p>
+</div></div>
+
+<div class="sec" style="--c:var(--c7);--cb:var(--c7b)">
+<h2>∑ MATH TOOLBOX · NUMBERS <small>no calculator</small></h2>
+<div class="bd">
+<p>\(\sin a\pm\sin b=2\sin\frac{a\pm b}{2}\cos\frac{a\mp b}{2}\); \(\cos a+\cos b=2\cos\frac{a+b}{2}\cos\frac{a-b}{2}\); \(\cos a-\cos b=-2\sin\frac{a+b}{2}\sin\frac{a-b}{2}\)</p>
+<p>\(\sin(a\pm b)=\sin a\cos b\pm\cos a\sin b\); \(\cos(a\pm b)=\cos a\cos b\mp\sin a\sin b\); \(\sin^2x=\frac{1-\cos2x}{2}\), \(\cos^2x=\frac{1+\cos2x}2\); \(\langle\sin^2\rangle=\langle\cos^2\rangle=\frac12\)</p>
+<p>\(a\cos x+b\sin x=R\cos(x-\delta)\), \(R=\sqrt{a^2+b^2}\), \(\tan\delta=\frac ba\)</p>
+<p>\(\cosh x=\frac{e^x+e^{-x}}2\), \(\sinh x=\frac{e^x-e^{-x}}2\), \((\cosh)'=\sinh\), \((\sinh)'=\cosh\), \(\cosh^2-\sinh^2=1\), \(e^{\pm x}=\cosh x\pm\sinh x\), \(e^{i\theta}=\cos\theta+i\sin\theta\)</p>
+<p><b>Small x:</b> \(\sin x\approx\tan x\approx x\), \(\cos x\approx1-\frac{x^2}2\), \(e^x\approx1+x\), \((1+x)^n\approx1+nx\), \(\sinh x\approx x\), \(\cosh x\approx1\), \(\frac{\sin x}{x}\to1\)</p>
+<p>\(ar^2+br+c=0\Rightarrow r=\frac{-b\pm\sqrt{b^2-4ac}}{2a}\). \(\frac{d}{dt}[e^{-\gamma t}f]=e^{-\gamma t}(f'-\gamma f)\)</p>
+<p><b>#:</b> √2 = 1.414, √3 = 1.732, √5 = 2.236, π² ≈ 9.87 ≈ g, \(2^{1/6}\) = 1.122, \(2^{1/3}\) = 1.26, e = 2.718, 1/e = 0.368, ln 2 = 0.693. g = 9.8 m/s². ρ: water 1000, sea 1025, ice 917, air ≈ 1.2, Hg 13 600 kg/m³. 1 atm = 1.013×10⁵ Pa = 760 mmHg.</p>
+<p><b>Units:</b> b kg/s · k N/m = kg/s² · κ N·m/rad · μ kg/m · Q m³/s · η Pa·s · γ, ω s⁻¹ · u J/m.</p>
+</div></div>
+
+</div>
+</div>
+</div></body></html>
