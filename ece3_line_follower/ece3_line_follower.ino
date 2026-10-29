@@ -13,7 +13,7 @@
 
 // ---------------- Orientation (verify with MODE 1 and MODE 2) ----------------
 // On the TI-RSLK, IR sensor 0 (P7.0) is on the robot's RIGHT side and sensor 7
-// is on the LEFT (looking down at the robot from behind, front pointing away).
+// is on the LEFT (course BasicCode: "right -> left, 0 -> 7").
 // If MODE 1 says "LINE RIGHT" when the tape is on the robot's left, flip this.
 const bool SENSOR0_ON_RIGHT = true;
 
@@ -30,6 +30,12 @@ const int RIGHT_SLEEP = 11;
 const int RIGHT_DIR   = 30;
 const int RIGHT_PWM   = 39;
 
+// Chassis LEDs (from the course pin chart)
+const int LED_FRONT_RIGHT = 41;  // yellow
+const int LED_FRONT_LEFT  = 51;  // yellow
+const int LED_BACK_LEFT   = 57;  // red
+const int LED_BACK_RIGHT  = 58;  // red
+
 // ---------------- Calibration (raw ECE3_read_IR values, indexed like the library) ----------------
 const int sensorMin[8] = { 798, 688, 642, 635, 612, 688, 735, 853 };      // white
 const int sensorMax[8] = { 2500, 2500, 2500, 2016, 2213, 2162, 2500, 2500 }; // black
@@ -37,9 +43,12 @@ const int sensorMax[8] = { 2500, 2500, 2500, 2016, 2213, 2162, 2500, 2500 }; // 
 // ---------------- Tuning ----------------
 const int   BASE_SPEED   = 50;   // forward PWM on a straight. Must be above the stall PWM from MODE 2
 const int   MAX_SPEED    = 100;  // cap for the outer wheel
-const int   MAX_REVERSE  = 40;   // inner wheel may back up this much on sharp curves
-const float KP           = 0.020; // PWM per unit of error (error is -3500..+3500)
-const float KD           = 0.0;   // start P-only; try 0.02-0.05 later if it wiggles on straights
+const long  MAX_ERROR    = 3500; // line under the outermost sensor
+// Course rule: Kp * error < base speed. ERROR_MARGIN = largest correction as a fraction
+// of BASE_SPEED, so at MAX_ERROR the inner wheel just stops (margin 1.0).
+const float ERROR_MARGIN = 1.0;
+const float KP           = ERROR_MARGIN * BASE_SPEED / MAX_ERROR;  // = 0.0143
+const float KD           = 0.0;  // check Kp first with Kd = 0, then try Kd = 5..10 x KP
 const int   SEARCH_SPEED = 45;   // pivot speed while hunting for a lost line
 const unsigned long LOST_TIMEOUT_MS = 2000; // give up searching after this long
 
@@ -97,11 +106,12 @@ void setMotors(int left, int right) {
   setMotor(RIGHT_DIR, RIGHT_PWM, RIGHT_FORWARD, right);
 }
 
-// Status LED on the LaunchPad: green = following, blue = searching, red = stopped
-void setLed(bool r, bool g, bool b) {
-  digitalWrite(RED_LED, r ? HIGH : LOW);
-  digitalWrite(GREEN_LED, g ? HIGH : LOW);
-  digitalWrite(BLUE_LED, b ? HIGH : LOW);
+// Chassis LEDs: front = yellow, back = red
+void setLeds(bool frontLeft, bool frontRight, bool back) {
+  digitalWrite(LED_FRONT_LEFT, frontLeft ? HIGH : LOW);
+  digitalWrite(LED_FRONT_RIGHT, frontRight ? HIGH : LOW);
+  digitalWrite(LED_BACK_LEFT, back ? HIGH : LOW);
+  digitalWrite(LED_BACK_RIGHT, back ? HIGH : LOW);
 }
 
 void setup() {
@@ -114,18 +124,19 @@ void setup() {
   pinMode(RIGHT_SLEEP, OUTPUT);
   pinMode(RIGHT_DIR, OUTPUT);
   pinMode(RIGHT_PWM, OUTPUT);
-  pinMode(RED_LED, OUTPUT);
-  pinMode(GREEN_LED, OUTPUT);
-  pinMode(BLUE_LED, OUTPUT);
+  pinMode(LED_FRONT_RIGHT, OUTPUT);
+  pinMode(LED_FRONT_LEFT, OUTPUT);
+  pinMode(LED_BACK_LEFT, OUTPUT);
+  pinMode(LED_BACK_RIGHT, OUTPUT);
 
   setMotors(0, 0);
   digitalWrite(LEFT_SLEEP, HIGH);   // wake the motor drivers
   digitalWrite(RIGHT_SLEEP, HIGH);
 
   if (MODE == 0) {
-    // 3 second countdown: blink red so you know it is about to move
+    // 3 second countdown: blink the red back LEDs so you know it is about to move
     for (int i = 0; i < 6; i++) {
-      setLed(i % 2 == 0, false, false);
+      setLeds(false, false, i % 2 == 0);
       delay(500);
     }
   }
@@ -143,10 +154,11 @@ void drive() {
   bool seen = readLine();
 
   // Every sensor black: either the end bar or someone picked the robot up. Stop.
+  // Require several reads in a row so a one-time "phantom crosspiece" glitch is ignored.
   if (blackCount >= ALL_BLACK_SENSORS) {
     if (++allBlackReads >= 3) {
       setMotors(0, 0);
-      setLed(true, false, true);
+      setLeds(true, true, true);
       return;
     }
   } else {
@@ -157,13 +169,17 @@ void drive() {
     if (lostSince == 0) lostSince = millis();
     if (millis() - lostSince > LOST_TIMEOUT_MS) {
       setMotors(0, 0);              // searched long enough; wait until the line is back
-      setLed(true, false, false);
+      setLeds(false, false, true);
       return;
     }
     // Pivot toward the side where the line was last seen
-    if (lastError >= 0) setMotors(SEARCH_SPEED, -SEARCH_SPEED);   // line went off to the right
-    else                setMotors(-SEARCH_SPEED, SEARCH_SPEED);   // line went off to the left
-    setLed(false, false, true);
+    if (lastError >= 0) {             // line went off to the right
+      setMotors(SEARCH_SPEED, -SEARCH_SPEED);
+      setLeds(false, true, false);
+    } else {                          // line went off to the left
+      setMotors(-SEARCH_SPEED, SEARCH_SPEED);
+      setLeds(true, false, false);
+    }
     return;
   }
   lostSince = 0;
@@ -172,10 +188,10 @@ void drive() {
   float correction = KP * lineError + KD * (lineError - lastError);
   lastError = lineError;
 
-  int left  = constrain((int)(BASE_SPEED + correction), -MAX_REVERSE, MAX_SPEED);
-  int right = constrain((int)(BASE_SPEED - correction), -MAX_REVERSE, MAX_SPEED);
+  int left  = constrain((int)(BASE_SPEED + correction), 0, MAX_SPEED);
+  int right = constrain((int)(BASE_SPEED - correction), 0, MAX_SPEED);
   setMotors(left, right);
-  setLed(false, true, false);
+  setLeds(true, true, false);
 }
 
 // ---------------- MODE 1: sensor test (no motors) ----------------
