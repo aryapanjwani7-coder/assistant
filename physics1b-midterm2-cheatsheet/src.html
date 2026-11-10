@@ -1,0 +1,288 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="node_modules/katex/dist/katex.min.css">
+<style>
+@page { size: A4; margin: 0; }
+:root{
+  --c1:#c45a00; --c1b:#fff1e3;   /* sound */
+  --c2:#7a1fa2; --c2b:#f4e9f9;   /* hydrogen */
+  --c3:#c4161c; --c3b:#fdeceb;   /* van de graaff */
+  --c4:#1f5fbf; --c4b:#e9f0fc;   /* gauss */
+  --c5:#007f7f; --c5b:#e6f6f6;   /* dipole */
+  --c6:#3d4a5c; --c6b:#eef1f5;   /* beyond */
+  --c7:#1d6b2f; --c7b:#eaf6ec;   /* math */
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#fff}
+body{font-family:Carlito, 'Liberation Sans', sans-serif; font-size:var(--fs,5.6pt); line-height:1.13; color:#111; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+.page{transform:scale(0.955);transform-origin:50% 50%;width:210mm;height:296.4mm;padding:2.6mm 2.6mm 2.2mm 2.6mm;display:flex;flex-direction:column;overflow:hidden}
+.top{display:flex;align-items:center;gap:1.5mm;margin-bottom:1mm;border-bottom:0.8pt solid #222;padding-bottom:0.6mm}
+.top .ttl{font-size:9.5pt;font-weight:bold;letter-spacing:0.2pt;white-space:nowrap}
+.top .chips{display:flex;gap:0.8mm;flex-wrap:wrap}
+.chip{color:#fff;border-radius:1mm;padding:0.1mm 1mm;font-weight:bold;font-size:5.4pt;white-space:nowrap}
+.top .strat{font-size:5.1pt;margin-left:auto;text-align:right;line-height:1.1}
+.grid{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;grid-template-rows:auto 1fr;gap:1.1mm;min-height:0}
+.col{display:flex;flex-direction:column;gap:0.7mm;min-height:0;overflow:hidden}
+#cA{grid-column:1;grid-row:1/3}
+#cW{grid-column:2/4;grid-row:1}
+#cB{grid-column:2;grid-row:2}
+#cC{grid-column:3;grid-row:2}
+#cD{grid-column:4;grid-row:1/3}
+.wide{display:grid;grid-template-columns:1fr 1fr;gap:1.1mm;align-items:start}
+.sec{flex-shrink:0;border:0.7pt solid var(--c);border-radius:1.2mm;background:#fff;overflow:hidden}
+.sec>h2{margin:0;background:var(--c);color:#fff;font-size:6.6pt;padding:0.25mm 1mm;line-height:1.15;display:flex;justify-content:space-between;align-items:baseline}
+.sec>h2 small{font-weight:normal;font-size:4.9pt;opacity:0.95}
+.bd{padding:0.4mm 0.9mm 0.5mm 0.9mm}
+h3{margin:0.5mm 0 0.2mm 0;font-size:5.9pt;color:var(--c);border-bottom:0.35pt solid var(--c);line-height:1.1}
+h3:first-child{margin-top:0}
+p{margin:0.15mm 0}
+ul,ol{margin:0.1mm 0;padding-left:2.6mm}
+li{margin:0}
+.box{background:var(--cb);border-left:1.1pt solid var(--c);padding:0.25mm 0.7mm;margin:0.35mm 0;border-radius:0.6mm}
+.key{border:0.6pt solid var(--c);background:#fff;padding:0.15mm 0.6mm;border-radius:0.6mm;display:inline-block}
+.warn{background:#fff6cc;border-left:1.1pt solid #d4a300;padding:0.2mm 0.7mm;margin:0.35mm 0;border-radius:0.6mm}
+.star{background:#f3f3f3;border-left:1.1pt dashed #888;padding:0.2mm 0.7mm;margin:0.35mm 0;border-radius:0.6mm}
+.r{color:#c4161c;font-weight:bold}
+.g{color:#1d8f3a;font-weight:bold}
+.bl{color:#1f5fbf;font-weight:bold}
+.mut{color:#555}
+.eq{text-align:center;margin:0.25mm 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0.9mm}
+table{border-collapse:collapse;width:100%}
+td,th{border:0.4pt solid #bbb;padding:0.15mm 0.5mm;vertical-align:middle;text-align:left}
+th{background:#f0f0f0;font-size:5.5pt}
+.katex{font-size:1.06em}
+.katex-display{margin:0.2mm 0}
+svg{width:100%;display:block}
+.fig{margin:0.3mm 0}
+.s{font-size:0.92em}
+ol.steps{padding-left:2.9mm}
+ol.steps>li::marker{font-weight:bold;color:var(--c)}
+.flex{display:flex;gap:0.8mm;align-items:center}
+</style></head>
+<body><div class="page">
+
+<div class="top">
+  <div class="ttl">PHYSICS 1B · MIDTERM 2 CHEATSHEET</div>
+  <div class="chips">
+    <span class="chip" style="background:var(--c1)">① Doppler · beats · sound</span>
+    <span class="chip" style="background:var(--c2)">② H-atom orbit · escape · 2D</span>
+    <span class="chip" style="background:var(--c3)">③ Van de Graaff sphere</span>
+    <span class="chip" style="background:var(--c4)">④ Gauss · cube flux</span>
+    <span class="chip" style="background:var(--c5)">⑤ Dipole</span>
+    <span class="chip" style="background:var(--c6)">★ Other ch.4–7</span>
+    <span class="chip" style="background:var(--c7)">∑ Constants · math</span>
+  </div>
+  <div class="strat"><b>5 Qs · 100 min · calculator OK.</b> Write the principle first (Gauss / energy cons. / F = mv²/r / superposition),<br><b>label middle steps</b> (rubric), draw the diagram with arrows, keep symbols until the end, then plug in numbers <b>in SI</b>.<br>Check: units, signs (+/− charge), limits (z≫d → point charge or kp/z³).</div>
+</div>
+
+<div class="grid">
+
+<!-- ================= COLUMN A : SOUND ================= -->
+<div class="col" id="cA">
+<div class="sec" style="--c:var(--c1);--cb:var(--c1b)">
+<h2>① DOPPLER EFFECT · BEATS <small>review p.1 · lect. 7</small></h2>
+<div class="bd">
+<div class="fig">%%DOPPLER%%</div>
+<div class="box"><b>His review-slide form</b>: put an x-axis pointing <b>from source → observer</b>; \(v_s, v_o\) = signed velocity components along it, <b>relative to the ground (still air)</b>:
+<div class="eq"><span class="key">\(f'=\dfrac{v-v_o}{v-v_s}\,f\)</span> &nbsp; v = speed of sound (343 m/s at 20 °C)</div>
+Source toward observer: \(v_s&gt;0\) ⇒ f′↑. Observer toward source: \(v_o&lt;0\) ⇒ f′↑.</div>
+<p><b>Memory form</b> <span class="key">\(f'=f\,\dfrac{v\pm v_o}{v\mp v_s}\)</span> with magnitudes: <b>upper sign = moving TOWARD</b> the other, lower = away. "Toward ⇒ f′ higher" always.</p>
+<table class="s">
+<tr><th>case</th><th>λ′</th><th>f′</th></tr>
+<tr><td>source approaching</td><td>\(\frac{v-v_s}{f}\) squeezed</td><td>\(\frac{v}{v-v_s}f\) higher</td></tr>
+<tr><td>source receding</td><td>\(\frac{v+v_s}{f}\) stretched</td><td>\(\frac{v}{v+v_s}f\) <b>reduced</b></td></tr>
+<tr><td>observer approaching</td><td>λ unchanged</td><td>\(\frac{v+v_o}{v}f\)</td></tr>
+<tr><td>observer receding</td><td>λ unchanged</td><td>\(\frac{v-v_o}{v}f\)</td></tr></table>
+<p class="s">Moving source changes λ (wavefronts bunch up). A moving observer changes how fast wavefronts are met, so the relative speed changes, not λ.</p>
+<p><b>Slow speeds</b> (\(v_s,v_o\ll v\)): \(\frac{\Delta f}{f}\approx-\frac{v_r}{v}\), \(v_r=v_o-v_s\) (positive = separating).</p>
+<h3>His 3 follow-up questions</h3>
+<ul>
+<li><b>Car moving away?</b> f′ is <b>reduced</b>: \(f'=\frac{v}{v+v_s}f\).</li>
+<li><b>Reflected by a wall?</b> A stationary wall <b>keeps</b> the frequency it receives. <b>Moving reflector</b> (speed u toward a stationary source/listener) = double Doppler: the wall hears \(f_1=f\frac{v+u}{v}\), then re-emits as a moving source: \(f_2=f_1\frac{v}{v-u}=f\frac{v+u}{v-u}\). Beats with the original: \(|f_2-f|\).</li>
+<li><b>Wind?</b> The speed of sound is modified: relative to the ground it travels at \(v\pm w\) (downwind +). Work in the air frame (velocities relative to the air, v unchanged), or use \(f'=\frac{v+w-v_o}{v+w-v_s}f\) with w along the source→observer axis. Source and observer both at rest ⇒ <b>no shift</b> (f′ = f); only λ and travel time change.</li>
+</ul>
+<div class="box"><b>Beats</b> (at a fixed position): <span class="key">\(f_{beat}=|f_1-f_2|\)</span><br>
+\(y=2A\cos\!\big(2\pi\tfrac{f_1-f_2}{2}t\big)\cos(2\pi f_{avg}t)\), \(f_{avg}=\frac{f_1+f_2}{2}\). You hear pitch \(f_{avg}\) with loudness pulsing \(|f_1-f_2|\) times/s (e.g. 500 &amp; 505 Hz give 5 beats/s, <b>not</b> a 5 Hz tone). The envelope has frequency Δf/2, but loudness peaks twice per envelope cycle, so beats = Δf. Piano tuner: 440 vs 442 gives 2 beats/s, and beats slow as the notes match.</div>
+<p><b>Doppler + beats combo</b>: e.g. a moving source with a stationary one at the same f: \(f_{beat}=|f'-f|\). Two listeners or a reflector: find each f′ separately, then subtract.</p>
+<p class="s"><b>Light:</b> receding gives \(\Delta\lambda=\lambda_{obs}-\lambda_{src}&gt;0\) (<b>redshift</b>); approaching gives blueshift (Andromeda). Hubble \(v=H_0d\), age \(\approx1/H_0\approx14\) Gyr. Standard candle \(F=\frac{L}{4\pi d^2}\Rightarrow d=\sqrt{\frac{L}{4\pi F}}\). Binary stars and exoplanets: periodic shifts.</p>
+<p><b>Shock wave</b>: Mach \(M=\frac{v_{jet}}{c_s}\). Cone: <span class="key">\(\sin\theta=\frac{c_st}{v_{jet}t}=\frac{1}{M}\)</span> (M = 2 gives θ = 30°). The boom is heard whenever the cone passes you, continuously, not only when "breaking the barrier".</p>
+</div></div>
+
+<div class="sec" style="--c:var(--c1);--cb:var(--c1b)">
+<h2>① cont. · SOUND · INTENSITY · PIPES <small>lect. 7</small></h2>
+<div class="bd">
+<p>Sound is a longitudinal pressure wave in air and fluids (no shear); solids carry both kinds. \(s=s_{max}\cos(kx\mp\omega t+\varphi)\), \(\Delta P=\Delta P_{max}\sin(kx\mp\omega t+\varphi)\): 90° out of phase with s. Hearing 20 Hz–20 kHz.</p>
+<p><b>Speed</b> \(=\sqrt{\frac{\text{restoring}}{\text{inertia}}}\): fluid \(\sqrt{B/\rho}\), solid \(\sqrt{Y/\rho}\), ideal gas <span class="key">\(v=\sqrt{\gamma RT_K/M}\)</span> (adiabatic \(pV^\gamma\)=const gives \(dp/d\rho=\gamma p/\rho\)). Air: 331 m/s at 0 °C, 343 at 20 °C, \(v\approx331\sqrt{T_K/273}\). \(B=-\frac{\Delta p}{\Delta V/V}\), \(Y=\frac{F/A}{\Delta L/L}\). Faster in solids. Sound bends toward the slower medium (SOFAR channel).</p>
+<p><b>Intensity</b> \(I=\frac{P}{4\pi r^2}\) (2r gives I/4, −6 dB). <span class="key">\(I=\frac{(\Delta p_{max})^2}{2\rho v}=\tfrac12\Delta p_{max}u_{max}\)</span>, \(u_{max}=\frac{\Delta p_{max}}{\rho v}=\omega s_{max}\). \(I\propto A^2\).</p>
+<p><b>Level</b> <span class="key">\(\beta=10\log_{10}\frac{I}{I_0}\)</span> dB, \(I_0=10^{-12}\) W/m² (threshold), pain ≈ 1 W/m² = 120 dB. 10×I adds 10 dB; 2×I adds 3 dB; N equal sources add \(10\log N\). \(I=I_0 10^{\beta/10}\). ~1 dB is just noticeable; 3 dB is easily noticed. Loudness (phon) also depends on f.</p>
+<p><b>Interference</b> (two speakers in phase): \(\Delta r=|r_2-r_1|=n\lambda\) is <b>constructive</b>; \(\Delta r=(n+\tfrac12)\lambda\) is <b>destructive</b>. Phase φ = 2πΔr/λ, \(A_R=2A|\cos\frac\varphi2|\). Noise cancelling: anti-sound at 180°.</p>
+<div class="fig">%%PIPES%%</div>
+<p><b>Open–open:</b> <span class="key">\(\lambda_n=\frac{2L}{n},\ f_n=\frac{nv}{2L}\)</span>, <b>n = 1, 2, 3…</b> <span class="mut">(slide says "1, 3, 5", but its own picture shows λ = 2L, L, 2L/3: all n)</span>. <b>Closed–open:</b> <span class="key">\(\lambda_n=\frac{4L}{n},\ f_n=\frac{nv}{4L}\)</span>, <b>odd n only</b>. String fixed–fixed: \(f_n=\frac{n}{2L}\sqrt{F_T/\mu}\). Vocal folds \(f\sim\frac1{2L}\sqrt{F_T/\mu}\) (shorter and lighter give higher f). Timbre = the mix of harmonics \(f_1,2f_1,3f_1…\); resonance means driving at a natural frequency.</p>
+</div></div>
+</div>
+
+<!-- ================= WIDE: HYDROGEN + VDG ================= -->
+<div class="col" id="cW">
+<div class="wide">
+
+<div class="sec" style="--c:var(--c2);--cb:var(--c2b)">
+<h2>② H-ATOM: ORBIT · ESCAPE · 3D vs 2D <small>review p.2</small></h2>
+<div class="bd">
+<p>Proton +e, electron −e, \(r=5.29\times10^{-11}\) m. <b>Electric force is the centripetal force</b>; ignore gravity.</p>
+<p>\(F=\frac{1}{4\pi\epsilon_0}\frac{e^2}{r^2}=\frac{(8.99\times10^9)(1.602\times10^{-19})^2}{(5.29\times10^{-11})^2}=\) <b>8.25×10⁻⁸ N</b> (attractive). Gravity \(F_G=G\frac{m_em_p}{r^2}=3.63\times10^{-47}\) N. Ratio ≈ 2×10³⁹.</p>
+<ol class="steps" style="--c:var(--c2)">
+<li><b>Orbit speed</b>: \(\frac{m_ev^2}{r}=\frac{ke^2}{r^2}\Rightarrow\) <span class="key">\(v=\sqrt{\frac{ke^2}{m_er}}\)</span> \(=\) <b>2.19×10⁶ m/s</b>. Period \(T=\frac{2\pi r}{v}=1.52\times10^{-16}\) s.</li>
+<li><b>Energies</b> (U(∞)=0): \(U=-\frac{ke^2}{r}=-27.2\) eV, \(K=\tfrac12m_ev^2=\frac{ke^2}{2r}=+13.6\) eV, \(E=K+U=-\frac{ke^2}{2r}=\) <b>−13.6 eV</b> (bound, E&lt;0). Ionization energy 13.6 eV.</li>
+<li><b>Escape</b>: reach ∞ with zero speed, \(E_i=E_f=0\): \(\tfrac12m_ev_{esc}^2-\frac{ke^2}{r}=0\Rightarrow\) <span class="key">\(v_{esc}=\sqrt{\frac{2ke^2}{m_er}}\)</span> \(=\sqrt2\,v_{orb}=\) <b>3.10×10⁶ m/s</b>. Same structure as gravity's \(v_{esc}=\sqrt{2GM/r}\) (swap GMm for ke²). To escape you need <b>KE larger than |PE|</b>.</li>
+</ol>
+<div class="box"><b>2D world: F ∝ 1/r</b> (given: \(F_r=-\frac{C}{r}\), C = "κe²" > 0). Why: field lines spread over a circumference \(2\pi r\), not an area \(4\pi r^2\) (same as an infinite line charge, \(E=\frac{\lambda}{2\pi\epsilon_0 r}\)).
+<ol class="steps" style="--c:var(--c2);margin-top:0.2mm">
+<li>\(F=-\frac{dU}{dr}\Rightarrow\frac{dU}{dr}=\frac{C}{r}\). <b>Integrate</b>: \(U(r)=C\ln r+\text{const}\). Choose U(r₀) = 0 (any reference): <span class="key">\(U(r)=C\ln\frac{r}{r_0}\)</span> (ln r − ln r₀ = ln(r/r₀))</li>
+<li>Start at r₀ with v₀, stop at max separation R (K = 0): \(\tfrac12m_ev_0^2=U(R)-U(r_0)=C\ln\frac{R}{r_0}\)</li>
+<li><span class="key">\(v_0=\sqrt{\frac{2C}{m_e}\ln\frac{R}{r_0}}\)</span>. As R→∞, \(\ln(R/r_0)\to\infty\), so <b>\(v_{escape}\to\infty\)</b>. No finite escape velocity in 2D.</li>
+</ol>
+U grows without bound as r→∞ (in 3D U→0). Any finite energy has a turning point where K = E − U = 0. 2D circular orbit: \(\frac{mv^2}{r}=\frac{C}{r}\Rightarrow v=\sqrt{C/m}\), the same at every r! C has different units from 3D k; use the model given.</div>
+<div class="fig">%%POT2D%%</div>
+</div></div>
+
+<div class="sec" style="--c:var(--c3);--cb:var(--c3b)">
+<h2>③ VAN DE GRAAFF · HOLLOW METAL SPHERE <small>review p.3</small></h2>
+<div class="bd">
+<p>Belt carries charge up to a <b>hollow conducting dome</b> (radius R, charge Q). The prof confirmed: <b>metal sphere only</b>, not uniformly charged plastic. Charge sits on the <b>outer surface</b>.</p>
+<p><b>Gauss</b>: imagine a sphere of radius r: \(E\cdot4\pi r^2=\frac{Q_{enc}}{\epsilon_0}\). r &lt; R: \(Q_{enc}=0\Rightarrow E=0\). r &gt; R: <span class="key">\(E=\frac{kQ}{r^2}\)</span>, like a point charge.</p>
+<div class="two"><div>
+<p><b>Potential</b> (V(∞)=0), \(V=-\int_\infty^rE\,dr\):<br>
+r ≥ R: <span class="key">\(V=\frac{kQ}{r}\)</span><br>r ≤ R: <span class="key">\(V=\frac{kQ}{R}\)</span> = const ≠ 0<br>
+Surface: <span class="key">\(E(R^+)=\frac{kQ}{R^2}=\frac{V}{R}=\frac{\sigma}{\epsilon_0}\)</span></p></div>
+<div class="fig">%%SPHERE%%</div></div>
+<div class="warn"><b>"E = 0 inside but V = 100 kV?"</b> \(E_r=-\frac{dV}{dr}=0\) means V is <b>constant</b>, not zero. Its value is fixed by continuity with the outside at r = R. E depends on the <b>gradient</b> of V, not its value.</div>
+<div class="box"><b>Lecture example</b>: diameter 25.0 cm, so R = 0.125 m, V = 100 kV.
+<ol class="steps" style="--c:var(--c3)">
+<li>Charge: \(Q=4\pi\epsilon_0RV=\frac{RV}{k}=\frac{(0.125)(10^5)}{8.99\times10^9}=\) <b>1.39 μC</b> (small Q, yet huge V)</li>
+<li>Surface field: \(E=\frac VR=\frac{10^5}{0.125}=\) <b>8.0×10⁵ V/m</b> &lt; 3×10⁶ (no breakdown). σ = Q/4πR² = 7.08×10⁻⁶ C/m².</li>
+<li><b>Max charge before air breaks down</b> (\(E_{bd}\approx3\times10^6\) V/m): \(\frac{kQ_{max}}{R^2}=E_{bd}\Rightarrow Q_{max}=\frac{E_{bd}R^2}{k}=\) <b>5.2 μC</b>, \(V_{max}=E_{bd}R=\) <b>375 kV</b>.</li>
+<li><b>Work to bring q from ∞ to the surface</b> (slowly): \(W_{ext}=q\,\Delta V=q\frac{kQ}{R}\) (field does \(-qV\)). Example: q = 1 μC at 100 kV gives 0.1 J. Released from the surface, +q gains \(K=qV\) going to ∞.</li>
+<li>Outside: at r = 2R, V = 50 kV, E = 2×10⁵ V/m; V(∞) = 0.</li>
+</ol></div>
+<p><b>Scaling</b>: fixed Q, 2R gives V/2, E/4. Fixed V, 2R gives 2Q, E/2. <b>Capacitance</b> \(C=4\pi\epsilon_0R=R/k=13.9\) pF. Energy \(U=\tfrac12QV=\tfrac12CV^2=\) <b>0.0695 J</b> <span class="mut">(slide prints 0.695 J, a typo)</span>.</p>
+<p class="s"><b>Charge q placed inside the cavity</b> (★): −q is induced on the inner wall and +q added to the outer surface, so E ≠ 0 in the cavity but still 0 in the metal. <b>Faraday cage</b>: an empty closed metal shell has E = 0 inside whatever the outside field (grounding not needed). <b>Plastic</b> uniformly charged sphere (★, not tested): inside \(E=\frac{kQr}{R^3}\), \(V=\frac{kQ(3R^2-r^2)}{2R^3}\).</p>
+<p><b>Sharp points</b>: small sphere \(E=\frac VR\). At fixed V, smaller R gives a bigger E (corona, lightning rods). Needle R = 0.1 mm: breakdown at \(V=E_{bd}R=300\) V.</p>
+</div></div>
+
+</div>
+</div>
+
+<!-- ================= COLUMN B : GAUSS ================= -->
+<div class="col" id="cB">
+<div class="sec" style="--c:var(--c4);--cb:var(--c4b)">
+<h2>④ GAUSS'S LAW · CUBE FLUX <small>review p.4 · lect. 10</small></h2>
+<div class="bd">
+<p><b>Flux</b> (uniform E, flat surface): <span class="key">\(\Phi_E=\vec E\cdot\vec A=EA\cos\theta\)</span>, θ measured from the <b>normal</b> (not the plane!). General \(\Phi=\int\vec E\cdot\hat n\,dA\). Closed surface: <b>normal points outward</b>. Out is +, in is −, parallel to the face is 0. Units N·m²/C.</p>
+<div class="box"><b>Gauss</b>: <span class="key">\(\oint\vec E\cdot d\vec A=\frac{Q_{enc}}{\epsilon_0}\)</span>. The surface must be closed and orientable (a Klein bottle won't do). \(Q_{enc}\) is the algebraic sum inside. Outside charges change the local E on the surface but add <b>zero net flux</b>.</div>
+<div class="fig">%%CUBE%%</div>
+<table class="s"><tr><th>cube situation (side L)</th><th>result</th></tr>
+<tr><td>uniform E along +x (no charge)</td><td>entry face \(-EL^2\), exit \(+EL^2\), 4 sides 0, <b>net 0</b></td></tr>
+<tr><td>Q at <b>centre</b></td><td>total \(\frac{Q}{\epsilon_0}\), <b>each face \(\frac{Q}{6\epsilon_0}\)</b> (symmetry)</td></tr>
+<tr><td>Q moved off-centre (still inside)</td><td>total <b>unchanged</b>; individual faces now <b>unequal</b></td></tr>
+<tr><td>Q at a <b>corner</b></td><td>8 cubes would enclose Q, so this cube gets \(\frac{Q}{8\epsilon_0}\). The 3 far faces get \(\frac{Q}{24\epsilon_0}\) each; the 3 faces touching Q get <b>0</b> (E runs along them)</td></tr>
+<tr><td>Q at a face centre / edge midpoint</td><td>2 cubes give \(\frac{Q}{2\epsilon_0}\) / 4 cubes give \(\frac{Q}{4\epsilon_0}\)</td></tr>
+<tr><td>Q <b>outside</b> the cube</td><td>faces ≠ 0 but <b>net 0</b> (what enters leaves)</td></tr>
+<tr><td>+5 μC and −8 μC inside</td><td>\(\frac{-3\times10^{-6}}{8.85\times10^{-12}}=-3.39\times10^5\) N·m²/C</td></tr>
+<tr><td>\(\vec E=ax\hat i+by\hat j\) in \([0,L]^3\)</td><td>x = L face: \(aL\cdot L^2\), x = 0 face: 0, same for y, so \(\Phi=(a+b)L^3\), \(Q=\epsilon_0(a+b)L^3\)</td></tr></table>
+<p class="s"><b>Pattern:</b> charge at centre/face/edge/corner shares 1/1, 1/2, 1/4, 1/8 of \(Q/\epsilon_0\). <b>Why 0 on the near faces:</b> the field from a corner charge points radially, i.e. <b>along</b> the 3 planes that meet at the corner, so \(\vec E\cdot\hat n=0\).</p>
+<p class="s"><b>Lecture examples</b>: 10 N/C at 30° above the xy-plane, through 6 m² in the xz-plane (n = ŷ): \(\Phi=EA\cos30°=52\) N·m²/C. \(\vec E=cy^2\hat k\) through an a×b rectangle in xy, strips dA = b dy: \(\Phi=cb\int_0^ay^2dy=\tfrac13a^3bc\). Blobs: count only the charges inside, e.g. −4+6−1 = +1 μC.</p>
+<h3>Strategy + standard results</h3>
+<p>Symmetry → surface where E is constant and ∥ or ⊥ to n̂. <b>Sphere</b> \(E\,4\pi r^2\) · <b>cylinder</b> \(E\,2\pi rL\) · <b>pillbox</b> \(2EA\).</p>
+<ul class="s">
+<li>Uniform insulating sphere ρ₀: in \(E=\frac{kQr}{R^3}\) (∝ r), out \(\frac{kQ}{r^2}\); max at R. \(\rho=ar^n\): \(Q_{enc}=\frac{4\pi a}{n+3}r^{n+3}\), in \(E=\frac{ar^{n+1}}{(n+3)\epsilon_0}\), out \(\frac{aR^{n+3}}{(n+3)\epsilon_0r^2}\).</li>
+<li>Cylindrical shell σ₀: out \(E=\frac{\lambda}{2\pi\epsilon_0r}=\frac{R\sigma_0}{\epsilon_0r}\), in 0. Infinite plane \(\frac{\sigma}{2\epsilon_0}\) (independent of distance). Two opposite planes: \(\frac{\sigma}{\epsilon_0}\) between, 0 outside.</li>
+<li><b>Conductor</b> (electrostatic equilibrium): E = 0 inside the metal and in an empty cavity (Faraday cage, no ground needed); excess charge on the outer surface; just outside \(E=\frac{\sigma}{\epsilon_0}\), ⊥ to the surface; the whole conductor is equipotential.</li>
+<li>Differential form \(\nabla\cdot\vec E=\frac{\rho}{\epsilon_0}\) (divergence theorem). Zero divergence ≠ zero E (a uniform field has div 0).</li>
+</ul>
+</div></div>
+</div>
+
+<!-- ================= COLUMN C : DIPOLE ================= -->
+<div class="col" id="cC">
+<div class="sec" style="--c:var(--c5);--cb:var(--c5b)">
+<h2>⑤ ELECTRIC DIPOLE <small>review p.5 · lect. 9, 11</small></h2>
+<div class="bd">
+<p>Exactly <b>two</b> charges +q and −q (prof: "no more, no less"), separation d. <span class="key">\(\vec p=q\vec d\)</span>, pointing <b>from − to +</b>. Units C·m.</p>
+<div class="fig">%%DIPOLE%%</div>
+<div class="box"><b>Field on the perpendicular bisector</b> at height z (charges at x = ±d/2):
+<ol class="steps" style="--c:var(--c5)">
+<li>Each charge: \(|E_\pm|=\frac{kq}{r^2}\), \(r=\sqrt{z^2+(d/2)^2}\)</li>
+<li>Geometry: \(\cos\theta=\frac zr\), \(\sin\theta=\frac{d/2}{r}\) (θ from the z-axis)</li>
+<li>z-components <b>cancel</b>; x-components add: \(E=2\frac{kq}{r^2}\sin\theta\)</li>
+<li><span class="key">\(E=\dfrac{kqd}{(z^2+d^2/4)^{3/2}}=\dfrac{kp}{(z^2+d^2/4)^{3/2}}\)</span>, direction <b>opposite p</b> (parallel to the line from + to −)</li>
+<li>z ≫ d: <span class="key">\(E\approx\frac{kp}{z^3}\)</span>, falls off faster than a point charge (net charge 0)</li>
+</ol></div>
+<p><b>Compare: two equal +q</b>: x-parts cancel, \(E_z=\frac{2kq\,z}{r^3}\to\frac{k(2q)}{z^2}\) (point charge 2q). <b>On the axis</b> (distance z from the centre): \(E=\frac{2kpz}{(z^2-d^2/4)^2}\to\frac{2kp}{z^3}\), along p.</p>
+<p><b>Potential</b> (scalar, no components!): \(V=kq\big(\frac{1}{r_+}-\frac{1}{r_-}\big)\), \(r_\pm=\sqrt{x^2+(z\mp\frac d2)^2}\). Far: <span class="key">\(V=\frac{k\,\vec p\cdot\hat r}{r^2}=\frac{kp\cos\theta}{r^2}\)</span>. On the bisector: <b>V = 0 but E ≠ 0</b>.<br>
+<span class="s">Lecture: q = 3 nC, d = 4 cm: V(0,0,1 cm) = 1.80×10³ V; V(0,0,−5 cm) = −514 V; V(3,0,2 cm) = 360 V.</span></p>
+<div class="box"><b>Dipole in a uniform external E</b>: \(\vec F_+=q\vec E\), \(\vec F_-=-q\vec E\), so <b>net force 0</b>, but the forces are separated, giving a <b>torque</b>:
+\(\vec\tau=\frac{\vec d}{2}\times q\vec E+(-\frac{\vec d}{2})\times(-q\vec E)=\) <span class="key">\(\vec p\times\vec E\)</span>, \(|\tau|=pE\sin\theta\)<br>
+<b>Energy</b>: \(dU=-dW=pE\sin\theta\,d\theta\Rightarrow\) <span class="key">\(U=-\vec p\cdot\vec E=-pE\cos\theta\)</span> (U = 0 at 90°). \(\tau_\theta=-\frac{dU}{d\theta}\) (like \(F=-\frac{dU}{dx}\)).
+<table class="s" style="margin-top:0.3mm"><tr><th>θ</th><th>U</th><th>τ</th><th></th></tr>
+<tr><td>0°</td><td>−pE (min)</td><td>0</td><td class="g">stable, aligned</td></tr>
+<tr><td>90°</td><td>0</td><td>pE (max)</td><td></td></tr>
+<tr><td>180°</td><td>+pE (max)</td><td>0</td><td class="r">unstable</td></tr></table>
+Work by an external agent to rotate θ₁→θ₂: \(W=U_2-U_1=pE(\cos\theta_1-\cos\theta_2)\). Small oscillations: \(I\ddot\theta=-pE\theta\Rightarrow\omega=\sqrt{pE/I}\).<br>
+<b>Example</b>: q = 2 μC, d = 0.10 m, so p = 2×10⁻⁷ C·m. E = 5×10⁴ N/C, θ = 30°: τ = pE sin30° = <b>5.0×10⁻³ N·m</b>, U = −pE cos30° = −8.7×10⁻³ J.</div>
+<div class="warn"><b>Shifted / asymmetric charges</b>: never assume cancellation. For each charge: \(\vec r=\) (P − source), \(E_x=\frac{kq_i\,\Delta x}{r^3}\), \(E_y=\frac{kq_i\,\Delta y}{r^3}\) (sign of q included), then add components: \(|E|=\sqrt{E_x^2+E_y^2}\), \(\theta=\tan^{-1}\frac{E_y}{E_x}\).</div>
+<p class="s">Non-uniform E also gives a net force. Induced dipole: an atom polarizes in E. Water is a permanent dipole. Microwaves: lagging polarization absorbs \(\langle p\rangle=\tfrac12\omega E_0P_0\sin\delta\). Flocking: \(q\vec E\) moves fibres, \(\vec p\times\vec E\) stands them up.</p>
+</div></div>
+</div>
+
+<!-- ================= COLUMN D : OTHER ================= -->
+<div class="col" id="cD">
+<div class="sec" style="--c:var(--c6);--cb:var(--c6b)">
+<h2>★ CHARGE · COULOMB · FIELDS <small>lect. 8–9</small></h2>
+<div class="bd">
+<p>Charge is <b>quantized</b> (q = ne, e = 1.602×10⁻¹⁹ C; quarks ±⅓e, ±⅔e) and <b>conserved</b>, locally too: \(\frac{dQ_{in}}{dt}=-I_{out}\). Conductors have mobile electrons; insulators have bound ones. A charged comb attracts neutral paper by <b>polarization</b> (near charges closer). <b>Induction</b>: rod near a sphere → ground it → cut the ground → remove the rod: the sphere keeps the opposite charge.</p>
+<p><b>Coulomb</b> <span class="key">\(\vec F_{12}=\frac{1}{4\pi\epsilon_0}\frac{q_1q_2}{r_{12}^2}\hat r_{12}\)</span> (on 1 from 2; like charges repel). Newton's 3rd law holds. Both Coulomb and gravity go as 1/r² because "flux" spreads over 4πr² (3D). Superposition: add vectors.<br>
+<span class="s">Ex: q₂ = −3e at the origin, q₁ = +2e at (0, d), q₃ = −5e at (2d, 0): \(F_{21}=\frac{k6e^2}{d^2}\) (+y), \(F_{23}=\frac{k15e^2}{4d^2}\) (−x), \(F=\sqrt{F_{21}^2+F_{23}^2}\), \(\theta=\tan^{-1}\frac{F_{21}}{F_{23}}\).</span></p>
+<p><b>Field</b> \(\vec E=\vec F/q\), \(\vec E=\sum\frac{kq_i}{r_i^2}\hat r_i\): away from +, toward −. He⁺ example: E = k(2e)/r² = 4.1×10¹² N/C at 26.5 pm. Field lines start on + and end on −, number ∝ q, tangent = E, density = |E|, never cross.</p>
+<table class="s"><tr><th>source (on axis, distance z)</th><th>E</th><th>V</th></tr>
+<tr><td>point q</td><td>\(\frac{kq}{r^2}\)</td><td>\(\frac{kq}{r}\)</td></tr>
+<tr><td>line segment L (bisector)</td><td>\(\frac{k\lambda L}{z\sqrt{z^2+L^2/4}}\)</td><td>\(k\lambda\ln\frac{L+\sqrt{L^2+4z^2}}{-L+\sqrt{L^2+4z^2}}\)</td></tr>
+<tr><td>infinite line λ</td><td>\(\frac{\lambda}{2\pi\epsilon_0z}\)</td><td>\(-\frac{\lambda}{2\pi\epsilon_0}\ln\frac{r}{r_R}\)</td></tr>
+<tr><td>ring R, q</td><td>\(\frac{kqz}{(z^2+R^2)^{3/2}}\)</td><td>\(\frac{kq}{\sqrt{z^2+R^2}}\)</td></tr>
+<tr><td>disk R, σ</td><td>\(\frac{\sigma}{2\epsilon_0}\big(1-\frac{z}{\sqrt{z^2+R^2}}\big)\)</td><td>\(\frac{\sigma}{2\epsilon_0}(\sqrt{z^2+R^2}-|z|)\)</td></tr>
+<tr><td>infinite plane σ</td><td>\(\frac{\sigma}{2\epsilon_0}\) const</td><td>\(-\frac{\sigma}{2\epsilon_0}|z|\)+c</td></tr></table>
+<p class="s">All reduce to \(kq/z^2\) when z ≫ size. dq = λdl, σdA, ρdV; use symmetry to cancel components first.</p>
+</div></div>
+
+<div class="sec" style="--c:var(--c6);--cb:var(--c6b)">
+<h2>★ POTENTIAL · ENERGY · APPLICATIONS <small>lect. 11</small></h2>
+<div class="bd">
+<p>Conservative: \(\oint\vec E\cdot d\vec l=0\) (path-independent). <span class="key">\(W_e=-\Delta U\)</span>, \(V=\frac Uq\), <span class="key">\(\Delta U=q\Delta V\)</span>, <span class="key">\(V_B-V_A=-\int_A^B\vec E\cdot d\vec l\)</span>. <b>Two-charge energy</b> \(U=\frac{kQq}{r}\) (property of the system; >0 for like charges). Point \(V=\frac{kq}{r}\); many charges \(V=\sum\frac{kq_i}{r_i}\) (scalar sum).</p>
+<p><b>Energy conservation</b>: \(K_i+qV_i=K_f+qV_f\). Through ΔV from rest: \(\tfrac12mv^2=|q\Delta V|\) (electron through 100 V: 5.93×10⁶ m/s). 1 eV = 1.602×10⁻¹⁹ J. 3 nC pushed by a fixed 5 nC from 10 to 15 cm: \(K=kQq(\frac1{r_1}-\frac1{r_2})=4.5\times10^{-7}\) J.<br>
+<b>Assembly work</b> \(W=\sum_{i&lt;j}\frac{kq_iq_j}{r_{ij}}\) (order doesn't matter). Square of 2, 3, 4, 5 μC with 1 cm sides: W₂ = 5.4, W₃ = 15.9, W₄ = 36.5, total 57.8 J.</p>
+<p><b>E from V</b>: <span class="key">\(\vec E=-\nabla V\)</span>, \(E_r=-\frac{dV}{dr}\). E points toward decreasing V; V = 0 does not mean E = 0. Poisson \(\nabla^2V=-\rho/\epsilon_0\). Equipotentials ⊥ E, and W = 0 along them. <b>Uniform E</b> (plates): \(V_A-V_B=Ed\), \(E=\frac{|\Delta V|}{d}\); 1 N/C = 1 V/m. Plates with σ = 6.81×10⁻⁷: E = σ/ε₀ = 7.69×10⁴ V/m, ΔV = 500 V at 6.5 mm. Max for 2.5 cm of air: 3×10⁶ × 0.025 = 7.5×10⁴ V. Battery: q = ΔU/ΔV; a 30 W lamp at 12 V passes 2.5 C/s = 1.56×10¹⁹ e/s.</p>
+<p class="s"><b>Millikan</b>: \(|q|E=mg\Rightarrow|q|=\frac{mg}{E}=\frac{mgd}{V}\); charges come in multiples of e. <b>Inkjet</b>: \(a_y=\frac{qE}{m}\), \(t=\frac{L}{v_0}\), \(y=\frac{qE}{2mv_0^2}x^2\) (example: 1.0×10³ m/s², 1 ms, 0.50 mm). <b>Precipitator</b>: \(|q|E=6\pi\eta rv_d\Rightarrow v_d=\frac{|q|E}{6\pi\eta r}\). <b>Photocopier</b>: light discharges the drum; toner sticks to charged (CAD) or exposed (DAD) areas. Spray paint wraps around; Faraday recesses are poorly coated.</p>
+</div></div>
+
+<div class="sec" style="--c:#b8860b;--cb:#fff8e1">
+<h2>✔ 5-QUESTION PLAYBOOK <small>review Qs</small></h2>
+<div class="bd">
+<table class="s">
+<tr><th>Q</th><th>likely asks</th><th>do this</th></tr>
+<tr><td style="color:var(--c1)"><b>①</b></td><td>f′ approaching/receding; wall echo; beats; wind</td><td>Pick the axis source→observer, signs, \(f'=\frac{v-v_o}{v-v_s}f\). Reflector = 2 steps. Beats = \(|f_1-f_2|\). Wind changes v only.</td></tr>
+<tr><td style="color:var(--c2)"><b>②</b></td><td>F on e⁻; orbit v; v_esc; 2D version</td><td>Coulomb; \(\frac{mv^2}{r}=\frac{ke^2}{r^2}\); \(E_{tot}=0\) at ∞; 2D: \(F=-\frac{dU}{dr}\), integrate to \(C\ln\frac{r}{r_0}\), so v_esc → ∞.</td></tr>
+<tr><td style="color:var(--c3)"><b>③</b></td><td>E(r), V at surface, work ∞→R, max Q</td><td>Gaussian sphere: 0 / kQ/r². V = kQ/R. W = qV. \(Q_{max}=E_{bd}R^2/k\).</td></tr>
+<tr><td style="color:var(--c4)"><b>④</b></td><td>flux total/per face: centre, moved, corner</td><td>\(Q_{enc}/\epsilon_0\); centre ÷6; moved: same total; corner ÷8, far faces ÷24, near 0.</td></tr>
+<tr><td style="color:var(--c5)"><b>⑤</b></td><td>V, E at P, z≫d, torque</td><td>V scalar sum; E by components (bisector \(\frac{kp}{r^3}\), → kp/z³); \(\tau=pE\sin\theta\), \(U=-pE\cos\theta\).</td></tr></table>
+<p class="s"><b>Sign sanity</b>: +q moving to lower V gains K. An electron (q &lt; 0) moving to higher V gains K. E points from high V to low V. F on −q is opposite E.</p>
+</div></div>
+<div class="sec" style="--c:var(--c7);--cb:var(--c7b)">
+<h2>∑ CONSTANTS · MATH <small>calculator allowed</small></h2>
+<div class="bd">
+<p>\(k=\frac1{4\pi\epsilon_0}=8.99\times10^9\) N·m²/C² · \(\epsilon_0=8.85\times10^{-12}\) C²/N·m² · \(1/\epsilon_0=1.13\times10^{11}\) · e = 1.602×10⁻¹⁹ C · \(m_e=9.11\times10^{-31}\) kg · \(m_p=1.673\times10^{-27}\) kg · G = 6.67×10⁻¹¹ · \(E_{bd,air}\approx3\times10^6\) V/m · v_sound 343 m/s (20 °C) · R = 8.31 J/mol·K · \(I_0=10^{-12}\) W/m² · μ = 10⁻⁶, n = 10⁻⁹, p = 10⁻¹².</p>
+<p>\(\int\frac{dx}{(z^2+x^2)^{3/2}}=\frac{x}{z^2\sqrt{z^2+x^2}}\) (x = z tanθ) · \(\int\frac{dy}{\sqrt{x^2+y^2}}=\ln(y+\sqrt{x^2+y^2})\) · \(\int\frac{dr}{r^2}=-\frac1r\) · \(\int\frac{dr}{r}=\ln r\) · \(\ln a-\ln b=\ln\frac ab\) · \(\log_{10}2=0.301\), \(\log_{10}3=0.477\) · \((1+x)^n\approx1+nx\) · sphere \(4\pi r^2\), \(\frac43\pi r^3\); cylinder side \(2\pi rL\) · \(\sin a+\sin b=2\sin\frac{a+b}2\cos\frac{a-b}2\), \(\cos a+\cos b=2\cos\frac{a+b}2\cos\frac{a-b}2\).</p>
+</div></div>
+</div>
+
+</div>
+</div></body></html>
