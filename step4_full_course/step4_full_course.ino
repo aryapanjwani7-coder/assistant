@@ -5,6 +5,9 @@
 //   - on sharp turns the inner wheel goes backwards
 //   - if two lines are under the sensors (hairpins), it keeps the one it was following
 //   - stricter end-bar check so hairpins are not mistaken for the end bar
+//   - if the black suddenly gets wider than a line (end bar, tip of a V), it keeps
+//     going straight instead of steering along it
+//   - after losing the line at a V tip, it spins toward the side the other arm was seen
 #include <ECE3.h>
 
 uint16_t sensors[8];
@@ -59,6 +62,9 @@ int  lines = 0;                 // how many separate lines are under the sensors
 bool centerBlack = false;       // middle sensors (3 and 4) see black
 
 long lastPosition = 3500;       // where the line was last time (0 = right, 7000 = left)
+long otherPosition = -1;        // where a second line was seen (-1 = none)
+bool otherLineRight = false;    // last time two lines were seen, the other one was on the right
+unsigned long otherLineTime = 0;
 long lastError = 0;
 unsigned long lostTime = 0;
 int  allBlackCount = 0;
@@ -66,6 +72,7 @@ int  straightCount = 0;         // readings in a row driving straight on a singl
 bool sawStartBar = false;
 bool everSawLine = false;
 bool offEndBar = false;
+bool spinRight = false;         // which way to spin when the line is lost
 
 // speed above 0 = forward, below 0 = backward
 void setWheel(int dirPin, int pwmPin, int speed) {
@@ -112,6 +119,7 @@ void readSensors() {
   weighted = 0;
   total = 0;
   lines = 0;
+  otherPosition = -1;
   long bestDistance = 100000;
   int i = 0;
   while (i < 8) {
@@ -129,10 +137,19 @@ void readSensors() {
     lines++;
     long distance = labs(w / t - lastPosition);
     if (distance < bestDistance) {
+      if (total > 0) otherPosition = weighted / total;
       bestDistance = distance;
       weighted = w;
       total = t;
+    } else {
+      otherPosition = w / t;
     }
+  }
+
+  // Remember which side the other line was on (it is on the inside of a hairpin)
+  if (lines >= 2) {
+    otherLineRight = otherPosition < weighted / total;   // smaller = more to the right
+    otherLineTime = millis();
   }
 }
 
@@ -188,6 +205,7 @@ void loop() {
       lastPosition = 3500;
       lostTime = 0;
       straightCount = 0;
+      otherLineTime = 0;
       digitalWrite(LED_BACK_LEFT, LOW);
       digitalWrite(LED_BACK_RIGHT, LOW);
       digitalWrite(LED_FRONT_LEFT, HIGH);     // front LEDs on = on the way back
@@ -200,15 +218,18 @@ void loop() {
   }
 
   // ---------- OUT or BACK: watch for a bar ----------
+  // "Driving straight" = it has been on a single, centered line for a while and has
+  // not made a sharp turn or lost the line since. Bars come after straights.
+  bool drivingStraight = straightCount >= 50;
+
   // It only counts as a bar if:
-  //   - 7 or more sensors are very black, 3 readings in a row (ignores one-off glitches)
-  //   - the robot was driving straight on a single line just before (bars come after
-  //     straights; hairpins do not)
+  //   - 7 or more sensors are very black, 2 readings in a row (ignores one-off glitches)
+  //   - the robot was driving straight just before
   //   - enough time has passed since the start / U-turn
-  bool looksLikeBar = strongBlack >= 7 && straightCount >= 50 && timeInPhase > BAR_IGNORE_MS;
+  bool looksLikeBar = strongBlack >= 7 && drivingStraight && timeInPhase > BAR_IGNORE_MS;
   if (looksLikeBar) {
     allBlackCount++;
-    if (allBlackCount >= 3) {
+    if (allBlackCount >= 2) {
       allBlackCount = 0;
       drive(0, 0);
       if (phase == OUT) {
@@ -226,6 +247,14 @@ void loop() {
     allBlackCount = 0;
   }
 
+  // Black wider than a line (5+ very black sensors) after driving straight: this is the
+  // end bar (maybe hit at an angle) or the tip of a V. Keep going straight; don't
+  // steer along it. On a bar this gets all sensors onto the bar so it is recognized.
+  if (drivingStraight && lines == 1 && strongBlack >= 5) {
+    drive(BASE_SPEED, BASE_SPEED);
+    return;
+  }
+
   // ---------- Follow the line ----------
   if (total == 0) {
     straightCount = 0;
@@ -234,14 +263,24 @@ void loop() {
       drive(BASE_SPEED, BASE_SPEED);
       return;
     }
-    // Lost the line: turn toward where it was last seen, give up after 2 seconds
-    if (lostTime == 0) lostTime = millis();
+    // Lost the line: turn toward where it was last seen, give up after 2 seconds.
+    // If it was lost while roughly centered (tip of a V) and a second line was seen
+    // just before, the track continues on that second line's side.
+    if (lostTime == 0) {
+      lostTime = millis();
+      if (labs(lastError) < 1500 && millis() - otherLineTime < 1000) {
+        spinRight = otherLineRight;
+      } else {
+        spinRight = lastError > 0;
+      }
+      lastPosition = spinRight ? 0 : 7000;   // the line will come back in on this side
+    }
     if (millis() - lostTime > 2000) {
       drive(0, 0);
-    } else if (lastError > 0) {
-      drive(45, -45);      // line was on the right: spin right
+    } else if (spinRight) {
+      drive(45, -45);      // spin right
     } else {
-      drive(-45, 45);      // line was on the left: spin left
+      drive(-45, 45);      // spin left
     }
     return;
   }
@@ -255,8 +294,9 @@ void loop() {
   long error = 3500 - position;
   lastError = error;
 
-  if (lines == 1 && labs(error) < 1000) straightCount++;
-  else straightCount = 0;
+  // Only a normal-width line counts (not a sensor bar lying along the line mid-spin)
+  if (lines == 1 && labs(error) < 1000 && strongBlack <= 4) straightCount++;
+  if (labs(error) > SHARP_ERROR) straightCount = 0;     // sharp turn: not driving straight
 
   float correction = KP * error;
 
