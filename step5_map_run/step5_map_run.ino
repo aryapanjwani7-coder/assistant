@@ -1,6 +1,7 @@
 // STEP 5: Mapping run. Drives exactly like Step 4, but also records the track
 // with the wheel encoders. When it stops, plug in USB and open the Serial Monitor
 // (9600): it prints the map every 5 seconds. Copy all of it and send it over.
+// To stop it at any time (and print the map), press one of the front bump switches.
 //
 // Drive over the start bar -> follow the line -> U-turn at the end bar ->
 // follow the line back -> stop at the start bar.
@@ -30,11 +31,15 @@ const int LED_FRONT_LEFT  = 51;
 const int LED_BACK_LEFT   = 57;
 const int LED_BACK_RIGHT  = 58;
 
+// Front bump switches (course pin chart). Press any of them to stop the robot.
+const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
+
 // ---- Numbers you can change ----
 const int   BASE_SPEED = 50;     // how fast it drives
 const float KP         = 0.014;  // how hard it steers
 const int   SPIN_SPEED = 50;     // how fast it spins for the U-turn
 const int   BACKUP_SPEED = 40;   // how fast it backs off the end bar before the U-turn
+const int   SLOW_SPIN_SPEED = 40; // spin speed once the line is almost found
 
 // Sharp turns: when the line reaches the outer sensors, turn much harder
 // so the inner wheel goes BACKWARDS. Set KP_SHARP = 0 to switch this off.
@@ -108,6 +113,7 @@ unsigned long runStart = 0;
 unsigned long outTime = 0;
 unsigned long backTime = 0;
 unsigned long lastPrint = 0;
+long backStartDist = 0;         // distance when the way back began
 
 // speed above 0 = forward, below 0 = backward
 void setWheel(int dirPin, int pwmPin, int speed) {
@@ -170,6 +176,7 @@ void setPhase(int p) {
     outTime = millis() - runStart;
   }
   if (p == DONE && phase == BACK) backTime = millis() - runStart - outTime;
+  if (p == BACK) backStartDist = travel2 / 2;
   phase = p;
   phaseStart = millis();
 }
@@ -278,6 +285,7 @@ void setup() {
   pinMode(LED_FRONT_LEFT, OUTPUT);
   pinMode(LED_BACK_LEFT, OUTPUT);
   pinMode(LED_BACK_RIGHT, OUTPUT);
+  for (int i = 0; i < 6; i++) pinMode(BUMP_PINS[i], INPUT_PULLUP);
 
   drive(0, 0);
   digitalWrite(LEFT_SLEEP, HIGH);
@@ -297,6 +305,13 @@ void loop() {
   readSensors();
   updateMap();
   unsigned long timeInPhase = millis() - phaseStart;
+
+  // A front bump switch pressed: stop and print the map
+  if (phase != DONE) {
+    for (int i = 0; i < 6; i++) {
+      if (digitalRead(BUMP_PINS[i]) == LOW) setPhase(DONE);
+    }
+  }
 
   // ---------- DONE: stay stopped and print the map every 5 s ----------
   if (phase == DONE) {
@@ -347,8 +362,11 @@ void loop() {
       drive(-SPIN_SPEED, SPIN_SPEED);
       if (blackSensors == 0) uturnStep = 4;
     } else {
-      // Keep spinning until the line is under the middle sensors again (half a turn)
-      drive(-SPIN_SPEED, SPIN_SPEED);
+      // Keep spinning until the line is under the middle sensors again (half a turn).
+      // Once the line shows up at the edge of the sensors, spin slower so it
+      // does not swing past it.
+      if (blackSensors > 0) drive(-SLOW_SPIN_SPEED, SLOW_SPIN_SPEED);
+      else                  drive(-SPIN_SPEED, SPIN_SPEED);
       if (centerBlack) {
         drive(0, 0);
         delay(100);                             // stop the spin before following
@@ -374,11 +392,26 @@ void loop() {
   // not made a sharp turn or lost the line since. Bars come after straights.
   bool drivingStraight = straightCount >= 50;
 
+  // On the way back, how far along is it compared with the way out?
+  // (Uses the wheel encoders; if they did not work, uses time instead.)
+  int backPercent = 0;
+  if (phase == BACK) {
+    if (outEndDist > 1000) backPercent = (travel2 / 2 - backStartDist) * 100 / outEndDist;
+    else if (outTime > 0)  backPercent = timeInPhase * 100 / outTime;
+  }
+  // Last 15% of the way back: the next wide black is the start bar, even if it
+  // was not driving perfectly straight before it (after T1 the straight is short)
+  bool nearStart = backPercent >= 85;
+  if (backPercent >= 120) {      // well past where the start bar should be: stop
+    setPhase(DONE);
+    return;
+  }
+
   // It only counts as a bar if:
   //   - 7 or more sensors are very black, 2 readings in a row (ignores one-off glitches)
   //   - the robot was driving straight just before
   //   - enough time has passed since the start / U-turn
-  bool looksLikeBar = strongBlack >= 7 && drivingStraight && timeInPhase > BAR_IGNORE_MS;
+  bool looksLikeBar = strongBlack >= 7 && (drivingStraight || nearStart) && timeInPhase > BAR_IGNORE_MS;
   if (looksLikeBar) {
     allBlackCount++;
     if (allBlackCount >= 2) {
@@ -402,7 +435,7 @@ void loop() {
   // Black wider than a normal line after driving straight: this is the end bar
   // (maybe hit at an angle) or the tip of a V. Keep going straight; don't steer
   // along it. On a bar this gets all sensors onto the bar so it is recognized.
-  if (drivingStraight && lines == 1 && strongBlack > normalWidth) {
+  if ((drivingStraight || nearStart) && lines == 1 && strongBlack > normalWidth) {
     drive(BASE_SPEED, BASE_SPEED);
     return;
   }
