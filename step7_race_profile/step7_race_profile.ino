@@ -40,8 +40,6 @@ const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 const int   BASE_SPEED = 50;     // how fast it drives
 const float KP         = 0.014;  // how hard it steers
 const int   SPIN_SPEED = 65;     // how fast it spins for the U-turn
-const int   BACKUP_SPEED = 40;   // how fast it backs off the end bar before the U-turn
-const int   SLOW_SPIN_SPEED = 40; // spin speed once the line is almost found
 
 // Sharp turns: when the line reaches the outer sensors, turn much harder
 // so the inner wheel goes BACKWARDS. Set KP_SHARP = 0 to switch this off.
@@ -72,6 +70,39 @@ const int   NUM_FLOW     = 2;
 const int   FLOW_BOOST   = 120;  // % speed on top of the profile in these sections
 const float FLOW_STEER   = 0.75; // steering strength there (1.0 = normal)
 const int   FLOW_RESCUE  = 2800; // line this far off-center: full steering again
+
+// Planned turns at the hairpins (zones from the map runs). If the line slips off
+// the sensors inside a zone, it does not search: it knows which way the turn goes.
+//  - Sharp corner (T5 ~95 degrees, T6 and T16 ~145 degree V): roll forward so the
+//    WHEELS are at the corner, spin fast most of the way round, then slower until
+//    the line is under the middle sensors.
+//  - U hairpin (T3, T4): spin straight away (fast, then slower) onto the line.
+const bool PLANNED_TURNS_ON = true;   // false = old behaviour (search for the line)
+const long PLANNED_TURNS[][5] = {
+  // from,   to,  direction (1 = right),  roll forward,  fast spin (turn counts)
+  {  1150,  1550,   1,   0, 150 },   // way out:  T3
+  {  1650,  1950,  -1,   0, 150 },   // way out:  T4
+  {  2000,  2350,   1,  80, 250 },   // way out:  T5 (~95 degree corner)
+  {  3550,  4100,   1,  80, 350 },   // way out:  T6 (V)
+  {  6450,  6900,   1,  80, 350 },   // way out:  T16 (V)
+  {  8050,  8500,  -1,  80, 350 },   // way back: T16 (V)
+  { 10850, 11350,  -1,  80, 350 },   // way back: T6 (V)
+  { 12700, 13050,  -1,  80, 250 },   // way back: T5 (~95 degree corner)
+  { 13060, 13350,   1,   0, 150 },   // way back: T4
+  { 13450, 13800,  -1,   0, 150 },   // way back: T3
+};
+const int NUM_PLANNED       = 10;
+const int PLANNED_FAST_SPIN = 90;  // spin speed for the first part
+const int PLANNED_SLOW_SPIN = 45;  // spin speed once it is nearly round
+const int PLANNED_MAX_TURN  = 700; // turned this far without finding the line: give up
+
+// Round curves: steer INTO the curve from the map (the line following then only
+// fixes the small error). 0 = off, 1.0 = the full curve from the map.
+const float FF_GAIN = 0.5;
+
+// U-turn at the end bar: spin fast this many turn counts (~150 degrees), then
+// slower until the line is under the middle sensors.
+const int UTURN_FAST_TURN = 480;
 
 // The map, from the map run. Each piece is about 150 encoder counts long.
 // MAP_DIST = distance at the END of the piece, MAP_TURN = how much it turned
@@ -146,11 +177,18 @@ bool sawStartBar = false;
 bool everSawLine = false;
 bool spinRight = false;         // which way to spin when the line is lost
 int  uturnStep = 0;             // which part of the U-turn it is doing
-unsigned long uturnStepStart = 0;
 float lineWidth = 2.5;          // learned: how many sensors a normal line makes very black
 int  speedNow = BASE_SPEED;     // current forward speed
 long slowUntil = 0;             // after losing the line: hairpin speed until this distance
 bool firstReading = true;       // first reading after finding the line (no D yet)
+int  plannedStep = 0;           // 0 = not doing a planned turn, 1..3 = which part
+int  plannedDir = 1;            // 1 = right, -1 = left
+int  plannedForward = 0;        // how far to roll forward first
+int  plannedFastTurn = 0;       // how far to spin fast
+long plannedStartDist = 0;
+long plannedStartTurn = 0;
+bool plannedUsed[NUM_PLANNED];  // each planned turn happens once
+long uturnStartTurn = 0;
 
 // ---------- Track map (from the wheel encoders) ----------
 const long SEG_COUNTS = 150;    // one map entry every 150 encoder counts of travel
@@ -163,6 +201,7 @@ long prevRightCount = 0;
 long travel2 = 0;               // total forward travel x2 (left + right counts)
 long segTravel2 = 0;            // travel x2 in the current entry
 long segTurn = 0;               // left counts - right counts (> 0 = turning right)
+long turnTotal = 0;             // all the turning so far (same units)
 int  segLost = 0;               // times the line was lost in the current entry
 unsigned long segStartTime = 0;
 
@@ -233,6 +272,7 @@ void updateMap() {
   travel2 += dl + dr;
   segTravel2 += dl + dr;
   segTurn += dl - dr;
+  turnTotal += dl - dr;
   if (segTravel2 >= 2 * SEG_COUNTS) saveSegment();
 }
 
@@ -251,6 +291,39 @@ int hairpinDirection(long d) {
   for (int i = first; i < last; i++) {
     if (MAP_DIST[i] < d - 150 || pieceStartDist(i) > d + 150) continue;
     if (MAP_LOST[i] || abs(MAP_TURN[i]) >= 300) return MAP_TURN[i] > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+// Spin in place: dir 1 = right, -1 = left
+void pivot(int dir, int speed) {
+  if (dir > 0) drive(speed, -speed);
+  else         drive(-speed, speed);
+}
+
+// Back to normal line following after a planned turn
+void endPlannedTurn(long d) {
+  plannedStep = 0;
+  firstReading = true;
+  lastPosition = 3500;
+  lastError = 0;
+  lostTime = 0;
+  straightCount = 0;
+  otherLineTime = 0;
+  speedNow = V_HAIRPIN;
+  slowUntil = d + 100;
+}
+
+// How much the map turns per encoder count at this distance (from the piece
+// we are in), for steering into round curves. Hairpins and pieces where the line
+// was lost are left out (those turns were search spins, not the track shape).
+float mapCurve(long d) {
+  int first = (phase == OUT) ? 0 : MAP_OUT_PIECES;
+  int last  = (phase == OUT) ? MAP_OUT_PIECES : MAP_PIECES;
+  for (int i = first; i < last; i++) {
+    if (MAP_DIST[i] < d || pieceStartDist(i) > d) continue;
+    if (MAP_LOST[i] || abs(MAP_TURN[i]) >= 400) return 0;
+    return (float)MAP_TURN[i] / (MAP_DIST[i] - pieceStartDist(i));
   }
   return 0;
 }
@@ -478,34 +551,16 @@ void loop() {
   // A normal line makes up to normalWidth sensors very black; more than that is the bar.
   int normalWidth = (int)(lineWidth + 1.0);
   if (phase == UTURN) {
+    long turned = uturnStartTurn - turnTotal;       // spinning left: counts go negative
     if (uturnStep == 0) {
-      // Back up until the sensors are on the bar (they may have rolled past it)
-      drive(-BACKUP_SPEED, -BACKUP_SPEED);
-      if (strongBlack > normalWidth) uturnStep = 1;
-    } else if (uturnStep == 1) {
-      // Keep backing up until the sensors are off the bar, onto the line we came in on
-      drive(-BACKUP_SPEED, -BACKUP_SPEED);
-      if (strongBlack <= normalWidth) {
-        uturnStep = 2;
-        uturnStepStart = millis();
-      }
-    } else if (uturnStep == 2) {
-      // Back up a little more, so the bar is out of reach while spinning
-      drive(-BACKUP_SPEED, -BACKUP_SPEED);
-      if (millis() - uturnStepStart > 250) uturnStep = 3;
-    } else if (uturnStep == 3) {
-      // Spin left until the sensors have left the line
-      drive(-SPIN_SPEED, SPIN_SPEED);
-      if (blackSensors == 0) uturnStep = 4;
+      // Spin left fast most of the way round (the bar is passed in this part)
+      drive(-PLANNED_FAST_SPIN, PLANNED_FAST_SPIN);
+      if (turned >= UTURN_FAST_TURN) uturnStep = 1;
     } else {
-      // Keep spinning until the line is under the middle sensors again (half a turn).
-      // Once the line shows up at the edge of the sensors, spin slower so it
-      // does not swing past it.
-      if (blackSensors > 0) drive(-SLOW_SPIN_SPEED, SLOW_SPIN_SPEED);
-      else                  drive(-SPIN_SPEED, SPIN_SPEED);
+      // Slower until the line we came in on is under the middle sensors
+      drive(-PLANNED_SLOW_SPIN, PLANNED_SLOW_SPIN);
       if (centerBlack) {
         drive(0, 0);
-        delay(100);                             // stop the spin before following
         lastError = 0;
         lastPosition = 3500;
         lostTime = 0;
@@ -523,6 +578,35 @@ void loop() {
       }
     }
     if (timeInPhase > 8000) setPhase(DONE);     // something went wrong: give up
+    return;
+  }
+
+  long distNow = travel2 / 2;
+
+  // ---------- Planned turn (T6) in progress ----------
+  if (plannedStep > 0) {
+    long turned = (turnTotal - plannedStartTurn) * plannedDir;
+    if (plannedStep == 1) {
+      // Roll forward so the wheels are at the tip of the V
+      drive(V_HAIRPIN, V_HAIRPIN);
+      if (centerBlack) {
+        endPlannedTurn(distNow);              // the line is back: it was not the tip
+      } else if (distNow - plannedStartDist >= plannedForward) {
+        plannedStep = 2;
+        plannedStartTurn = turnTotal;
+      }
+    } else if (plannedStep == 2) {
+      pivot(plannedDir, PLANNED_FAST_SPIN);   // fast most of the way round
+      if (turned >= plannedFastTurn) plannedStep = 3;
+    } else {
+      pivot(plannedDir, PLANNED_SLOW_SPIN);   // slower until the line is in the middle
+      if (centerBlack) {
+        endPlannedTurn(distNow);
+      } else if (turned >= PLANNED_MAX_TURN) {
+        endPlannedTurn(distNow);              // not found: fall back to the normal search
+        everSawLine = true;
+      }
+    }
     return;
   }
 
@@ -548,7 +632,6 @@ void loop() {
 
   // Bars are only looked for where the map says one should be: the last part of
   // the way out (after T16) and the last 15% of the way back.
-  long distNow = travel2 / 2;
   bool barWindow = (phase == OUT && distNow >= MAP_OUT_END - 530) || (phase == BACK && nearStart);
 
   // It only counts as a bar if 7 or more sensors are very black, 2 readings in a
@@ -560,8 +643,9 @@ void loop() {
       allBlackCount = 0;
       drive(0, 0);
       if (phase == OUT) {
-        delay(200);             // let the robot settle
-        uturnStep = (strongBlack > normalWidth) ? 1 : 0;   // already on the bar?
+        delay(80);              // let the robot stop
+        uturnStep = 0;
+        uturnStartTurn = turnTotal;
         digitalWrite(LED_BACK_LEFT, HIGH);    // back LEDs on = doing the U-turn
         digitalWrite(LED_BACK_RIGHT, HIGH);
         setPhase(UTURN);
@@ -602,6 +686,25 @@ void loop() {
     // Lost the line: turn toward where it was last seen, give up after 2 seconds.
     // If it was lost while roughly centered (tip of a V) and a second line was seen
     // just before, the track continues on that second line's side.
+    // Line ended inside a planned-turn zone (tip of T6): do the planned turn
+    if (PLANNED_TURNS_ON && lostTime == 0) {
+      for (int k = 0; k < NUM_PLANNED; k++) {
+        bool rightLeg = (phase == OUT) == (PLANNED_TURNS[k][0] < MAP_OUT_END);
+        if (rightLeg && !plannedUsed[k] &&
+            distNow >= PLANNED_TURNS[k][0] && distNow <= PLANNED_TURNS[k][1]) {
+          plannedUsed[k] = true;
+          plannedDir = PLANNED_TURNS[k][2];
+          plannedForward = PLANNED_TURNS[k][3];
+          plannedFastTurn = PLANNED_TURNS[k][4];
+          plannedStartDist = distNow;
+          plannedStartTurn = turnTotal;
+          plannedStep = (plannedForward > 0) ? 1 : 2;
+          segLost++;
+          drive(V_HAIRPIN, V_HAIRPIN);
+          return;
+        }
+      }
+    }
     if (lostTime == 0) {
       lostTime = millis();
       segLost++;
@@ -661,6 +764,10 @@ void loop() {
   // Steer in proportion to speed: twice as fast needs twice the wheel difference
   // for the same turn. (All the gains above were tuned at BASE_SPEED.)
   if (speedNow > BASE_SPEED) correction = correction * speedNow / BASE_SPEED;
+
+  // Round curve from the map: steer into it. For a curve of c turn counts per
+  // count travelled, the wheels need speeds of speed x (1 +- c/2).
+  correction += FF_GAIN * speedNow * mapCurve(distNow + 30) / 2;
   int maxSpeed = speedNow * 2;                   // outer wheel limit
   if (maxSpeed < 100) maxSpeed = 100;
   if (maxSpeed > 255) maxSpeed = 255;
