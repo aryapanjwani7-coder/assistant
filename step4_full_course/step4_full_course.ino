@@ -1,7 +1,7 @@
 // STEP 4: Full course.
 // Drive over the start bar -> follow the line -> U-turn at the end bar ->
 // follow the line back -> stop at the start bar.
-// The line following itself is exactly the same as Step 3.
+// Line following is Step 3 plus: on sharp turns the inner wheel goes backwards.
 #include <ECE3.h>
 
 uint16_t sensors[8];
@@ -23,6 +23,12 @@ const int LED_FRONT_LEFT  = 51;
 const int   BASE_SPEED = 50;     // how fast it drives
 const float KP         = 0.014;  // how hard it steers
 const int   SPIN_SPEED = 50;     // how fast it spins for the U-turn
+
+// Sharp turns: when the line reaches the outer sensors, turn much harder
+// so the inner wheel goes BACKWARDS. Set KP_SHARP = 0 to switch this off.
+const int   SHARP_ERROR = 2000;  // line under the outer 2 sensors on either side
+const float KP_SHARP    = 0.05;  // extra steering beyond SHARP_ERROR
+const int   MAX_REVERSE = 50;    // fastest a wheel may go backwards
 // ---------------------------------
 
 // What the robot is doing right now
@@ -191,8 +197,13 @@ void loop() {
   long error = 3500 - weighted / total;
   lastError = error;
 
-  int correction = KP * error;
-  int left  = constrain(BASE_SPEED + correction, 0, 100);
-  int right = constrain(BASE_SPEED - correction, 0, 100);
+  float correction = KP * error;
+
+  // Sharp turn: line near the edge of the sensors -> extra steering
+  if (error > SHARP_ERROR)  correction += KP_SHARP * (error - SHARP_ERROR);
+  if (error < -SHARP_ERROR) correction += KP_SHARP * (error + SHARP_ERROR);
+
+  int left  = constrain((int)(BASE_SPEED + correction), -MAX_REVERSE, 100);
+  int right = constrain((int)(BASE_SPEED - correction), -MAX_REVERSE, 100);
   drive(left, right);
 }
