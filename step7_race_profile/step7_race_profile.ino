@@ -39,7 +39,7 @@ const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 // ---- Numbers you can change ----
 const int   BASE_SPEED = 50;     // how fast it drives
 const float KP         = 0.014;  // how hard it steers
-const int   SPIN_SPEED = 50;     // how fast it spins for the U-turn
+const int   SPIN_SPEED = 65;     // how fast it spins for the U-turn
 const int   BACKUP_SPEED = 40;   // how fast it backs off the end bar before the U-turn
 const int   SLOW_SPIN_SPEED = 40; // spin speed once the line is almost found
 
@@ -56,8 +56,10 @@ const int V_STRAIGHT = 110;      // (almost) no turning
 const int V_GENTLE   = 80;       // gentle curve
 const int V_CURVE    = 60;       // curve
 const int V_HAIRPIN  = 50;       // hairpin / sharp V (not changed by SPEED_PERCENT)
-const int SPEED_PERCENT = 100;   // raise step by step: 100 -> 120 -> 140 -> ...
+const int SPEED_PERCENT = 130;   // raise step by step: 100 -> 130 -> 160 -> ...
 const float KD = 0.07;           // damping (course slides: Kd = 5..10 x Kp). 0 = off
+const int BRAKE_COUNTS = 3;      // encoder counts it needs to lose 1 unit of speed.
+                                 // Raise if it arrives at turns too fast.
 
 // The map, from the map run. Each piece is about 150 encoder counts long.
 // MAP_DIST = distance at the END of the piece, MAP_TURN = how much it turned
@@ -222,6 +224,25 @@ void updateMap() {
   if (segTravel2 >= 2 * SEG_COUNTS) saveSegment();
 }
 
+// Where map piece i begins
+long pieceStartDist(int i) {
+  if (i == 0) return MAP_OUT_START;
+  if (i == MAP_OUT_PIECES) return MAP_BACK_START;
+  return MAP_DIST[i - 1];
+}
+
+// If the map has a hairpin within 150 counts of here, which way it turns:
+// 1 = right, -1 = left, 0 = no hairpin here
+int hairpinDirection(long d) {
+  int first = (phase == OUT) ? 0 : MAP_OUT_PIECES;
+  int last  = (phase == OUT) ? MAP_OUT_PIECES : MAP_PIECES;
+  for (int i = first; i < last; i++) {
+    if (MAP_DIST[i] < d - 150 || pieceStartDist(i) > d + 150) continue;
+    if (MAP_LOST[i] || abs(MAP_TURN[i]) >= 300) return MAP_TURN[i] > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
 // Speed for one piece of the map, from how much it turns
 int pieceSpeed(int i) {
   int t = abs(MAP_TURN[i]);
@@ -233,22 +254,25 @@ int pieceSpeed(int i) {
   return (long)v * SPEED_PERCENT / 100;
 }
 
-// Target speed at this distance: the slowest piece between here and a bit ahead,
-// so it brakes BEFORE each turn. The faster it goes, the further it looks ahead.
+// Target speed at this distance. Each piece ahead allows a speed that rises the
+// further away it is (there is room to brake), so the robot brakes just in time
+// for each turn: speed allowed = piece speed + distance to it / BRAKE_COUNTS.
 int mapSpeed(long d, int speed) {
-  long ahead = 150 + 2L * speed;
   int first = (phase == OUT) ? 0 : MAP_OUT_PIECES;
   int last  = (phase == OUT) ? MAP_OUT_PIECES : MAP_PIECES;
-  int v = 255;
+  long v = 255;
+  bool onMap = false;
   for (int i = first; i < last; i++) {
     long pieceEnd = MAP_DIST[i];
-    long pieceStart = (i == first) ? (phase == OUT ? MAP_OUT_START : MAP_BACK_START) : MAP_DIST[i - 1];
-    if (pieceEnd >= d && pieceStart <= d + ahead) {
-      int pv = pieceSpeed(i);
-      if (pv < v) v = pv;
-    }
+    long pieceStart = pieceStartDist(i);
+    if (pieceEnd < d) continue;                       // already behind us
+    onMap = true;
+    long allowed = pieceSpeed(i);
+    if (pieceStart > d) allowed += (pieceStart - d) / BRAKE_COUNTS;
+    if (allowed < v) v = allowed;
+    if (pieceStart - d > 255L * BRAKE_COUNTS) break;  // too far ahead to matter
   }
-  if (v == 255) v = BASE_SPEED;    // past the end of the map
+  if (!onMap) v = BASE_SPEED;    // past the end of the map
   // Arrive at the end bar gently so it is recognized
   if (phase == OUT && d > MAP_OUT_END - 300 && v > V_GENTLE) v = V_GENTLE;
   return v;
@@ -544,7 +568,7 @@ void loop() {
   // ---------- Follow the line ----------
   if (total == 0) {
     speedNow = V_HAIRPIN;                        // lost the line: slow down
-    slowUntil = distNow + 300;                   // and stay slow until well past here
+    slowUntil = distNow + 150;                   // and stay slow until past here
     firstReading = true;
     straightCount = 0;
     // Not found the line yet after the start: keep going straight
@@ -558,7 +582,10 @@ void loop() {
     if (lostTime == 0) {
       lostTime = millis();
       segLost++;
-      if (labs(lastError) < 1500 && millis() - otherLineTime < 1000) {
+      int mapTurn = hairpinDirection(distNow);
+      if (mapTurn != 0) {
+        spinRight = mapTurn > 0;                  // the map knows which way this hairpin goes
+      } else if (labs(lastError) < 1500 && millis() - otherLineTime < 1000) {
         spinRight = otherLineRight;
       } else {
         spinRight = lastError > 0;
