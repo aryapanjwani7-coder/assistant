@@ -61,6 +61,18 @@ const float KD = 0.07;           // damping (course slides: Kd = 5..10 x Kp). 0 
 const int BRAKE_COUNTS = 3;      // encoder counts it needs to lose 1 unit of speed.
                                  // Raise if it arrives at turns too fast.
 
+// "Flowing" sections: T6 -> T15 (both ways). Curves, but no hairpins, so it
+// drives faster there and steers more gently, with no wheel going backwards.
+// If the line gets near the edge of the sensors, full steering comes back.
+const long FLOW_SECTIONS[][2] = {
+  {  4080,  6350 },   // way out:  after T6 -> before T16
+  {  8540, 10950 },   // way back: after T16 -> before T6
+};
+const int   NUM_FLOW     = 2;
+const int   FLOW_BOOST   = 120;  // % speed on top of the profile in these sections
+const float FLOW_STEER   = 0.75; // steering strength there (1.0 = normal)
+const int   FLOW_RESCUE  = 2800; // line this far off-center: full steering again
+
 // The map, from the map run. Each piece is about 150 encoder counts long.
 // MAP_DIST = distance at the END of the piece, MAP_TURN = how much it turned
 // (+ = right, - = left, about 3.3 = 1 degree), MAP_LOST = line was lost there.
@@ -243,15 +255,26 @@ int hairpinDirection(long d) {
   return 0;
 }
 
+// Is this distance inside a flowing section?
+bool inFlow(long d) {
+  for (int f = 0; f < NUM_FLOW; f++) {
+    if (d >= FLOW_SECTIONS[f][0] && d <= FLOW_SECTIONS[f][1]) return true;
+  }
+  return false;
+}
+
 // Speed for one piece of the map, from how much it turns
 int pieceSpeed(int i) {
   int t = abs(MAP_TURN[i]);
   if (MAP_LOST[i] || t >= 300) return V_HAIRPIN;
-  int v;
+  long v;
   if (t >= 150)     v = V_CURVE;
   else if (t >= 60) v = V_GENTLE;
   else              v = V_STRAIGHT;
-  return (long)v * SPEED_PERCENT / 100;
+  v = v * SPEED_PERCENT / 100;
+  if (inFlow(pieceStartDist(i)) && inFlow(MAP_DIST[i])) v = v * FLOW_BOOST / 100;
+  if (v > 255) v = 255;
+  return v;
 }
 
 // Target speed at this distance. Each piece ahead allows a speed that rises the
@@ -624,9 +647,16 @@ void loop() {
 
   float correction = KP * error + KD * change;
 
-  // Sharp turn: line near the edge of the sensors -> extra steering
-  if (error > SHARP_ERROR)  correction += KP_SHARP * (error - SHARP_ERROR);
-  if (error < -SHARP_ERROR) correction += KP_SHARP * (error + SHARP_ERROR);
+  // In a flowing section: gentler steering and no sharp-turn mode, unless the
+  // line is close to slipping off the edge of the sensors
+  bool flowing = inFlow(distNow) && labs(error) < FLOW_RESCUE;
+  if (flowing) {
+    correction = correction * FLOW_STEER;
+  } else {
+    // Sharp turn: line near the edge of the sensors -> extra steering
+    if (error > SHARP_ERROR)  correction += KP_SHARP * (error - SHARP_ERROR);
+    if (error < -SHARP_ERROR) correction += KP_SHARP * (error + SHARP_ERROR);
+  }
 
   // Steer in proportion to speed: twice as fast needs twice the wheel difference
   // for the same turn. (All the gains above were tuned at BASE_SPEED.)
@@ -635,7 +665,8 @@ void loop() {
   if (maxSpeed < 100) maxSpeed = 100;
   if (maxSpeed > 255) maxSpeed = 255;
 
-  int left  = constrain((int)(speedNow + correction), -MAX_REVERSE, maxSpeed);
-  int right = constrain((int)(speedNow - correction), -MAX_REVERSE, maxSpeed);
+  int minSpeed = flowing ? 0 : -MAX_REVERSE;     // no backwards wheel when flowing
+  int left  = constrain((int)(speedNow + correction), minSpeed, maxSpeed);
+  int right = constrain((int)(speedNow - correction), minSpeed, maxSpeed);
   drive(left, right);
 }
