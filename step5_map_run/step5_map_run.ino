@@ -34,6 +34,7 @@ const int LED_BACK_RIGHT  = 58;
 const int   BASE_SPEED = 50;     // how fast it drives
 const float KP         = 0.014;  // how hard it steers
 const int   SPIN_SPEED = 50;     // how fast it spins for the U-turn
+const int   BACKUP_SPEED = 40;   // how fast it backs off the end bar before the U-turn
 
 // Sharp turns: when the line reaches the outer sensors, turn much harder
 // so the inner wheel goes BACKWARDS. Set KP_SHARP = 0 to switch this off.
@@ -74,8 +75,10 @@ int  allBlackCount = 0;
 int  straightCount = 0;         // readings in a row driving straight on a single line
 bool sawStartBar = false;
 bool everSawLine = false;
-bool offEndBar = false;
 bool spinRight = false;         // which way to spin when the line is lost
+int  uturnStep = 0;             // which part of the U-turn it is doing
+unsigned long uturnStepStart = 0;
+float lineWidth = 2.5;          // learned: how many sensors a normal line makes very black
 
 // ---------- Track map (from the wheel encoders) ----------
 const long SEG_COUNTS = 150;    // one map entry every 150 encoder counts of travel
@@ -320,24 +323,49 @@ void loop() {
     return;
   }
 
-  // ---------- UTURN: spin in place until the line is under the middle sensors ----------
+  // ---------- UTURN: back off the bar, then turn half a circle onto the line ----------
+  // A normal line makes up to normalWidth sensors very black; more than that is the bar.
+  int normalWidth = (int)(lineWidth + 1.0);
   if (phase == UTURN) {
-    drive(-SPIN_SPEED, SPIN_SPEED);           // spin left
-    if (blackSensors == 0) offEndBar = true;  // sensors have swung off the end bar
-    if (offEndBar && centerBlack) {           // found the line we came in on
-      lastError = 0;
-      lastPosition = 3500;
-      lostTime = 0;
-      straightCount = 0;
-      otherLineTime = 0;
-      digitalWrite(LED_BACK_LEFT, LOW);
-      digitalWrite(LED_BACK_RIGHT, LOW);
-      digitalWrite(LED_FRONT_LEFT, HIGH);     // front LEDs on = on the way back
-      digitalWrite(LED_FRONT_RIGHT, HIGH);
-      setPhase(BACK);
-    } else if (timeInPhase > 5000) {          // spun 5 s without finding it: give up
-      setPhase(DONE);
+    if (uturnStep == 0) {
+      // Back up until the sensors are on the bar (they may have rolled past it)
+      drive(-BACKUP_SPEED, -BACKUP_SPEED);
+      if (strongBlack > normalWidth) uturnStep = 1;
+    } else if (uturnStep == 1) {
+      // Keep backing up until the sensors are off the bar, onto the line we came in on
+      drive(-BACKUP_SPEED, -BACKUP_SPEED);
+      if (strongBlack <= normalWidth) {
+        uturnStep = 2;
+        uturnStepStart = millis();
+      }
+    } else if (uturnStep == 2) {
+      // Back up a little more, so the bar is out of reach while spinning
+      drive(-BACKUP_SPEED, -BACKUP_SPEED);
+      if (millis() - uturnStepStart > 250) uturnStep = 3;
+    } else if (uturnStep == 3) {
+      // Spin left until the sensors have left the line
+      drive(-SPIN_SPEED, SPIN_SPEED);
+      if (blackSensors == 0) uturnStep = 4;
+    } else {
+      // Keep spinning until the line is under the middle sensors again (half a turn)
+      drive(-SPIN_SPEED, SPIN_SPEED);
+      if (centerBlack) {
+        drive(0, 0);
+        delay(100);                             // stop the spin before following
+        lastError = 0;
+        lastPosition = 3500;
+        lostTime = 0;
+        straightCount = 0;
+        otherLineTime = 0;
+        digitalWrite(LED_BACK_LEFT, LOW);
+        digitalWrite(LED_BACK_RIGHT, LOW);
+        digitalWrite(LED_FRONT_LEFT, HIGH);     // front LEDs on = on the way back
+        digitalWrite(LED_FRONT_RIGHT, HIGH);
+        setPhase(BACK);
+        return;
+      }
     }
+    if (timeInPhase > 8000) setPhase(DONE);     // something went wrong: give up
     return;
   }
 
@@ -357,8 +385,8 @@ void loop() {
       allBlackCount = 0;
       drive(0, 0);
       if (phase == OUT) {
-        delay(200);             // let the robot settle before spinning
-        offEndBar = false;
+        delay(200);             // let the robot settle
+        uturnStep = (strongBlack > normalWidth) ? 1 : 0;   // already on the bar?
         digitalWrite(LED_BACK_LEFT, HIGH);    // back LEDs on = doing the U-turn
         digitalWrite(LED_BACK_RIGHT, HIGH);
         setPhase(UTURN);
@@ -371,10 +399,10 @@ void loop() {
     allBlackCount = 0;
   }
 
-  // Black wider than a line (5+ very black sensors) after driving straight: this is the
-  // end bar (maybe hit at an angle) or the tip of a V. Keep going straight; don't
-  // steer along it. On a bar this gets all sensors onto the bar so it is recognized.
-  if (drivingStraight && lines == 1 && strongBlack >= 5) {
+  // Black wider than a normal line after driving straight: this is the end bar
+  // (maybe hit at an angle) or the tip of a V. Keep going straight; don't steer
+  // along it. On a bar this gets all sensors onto the bar so it is recognized.
+  if (drivingStraight && lines == 1 && strongBlack > normalWidth) {
     drive(BASE_SPEED, BASE_SPEED);
     return;
   }
@@ -419,9 +447,14 @@ void loop() {
   long error = 3500 - position;
   lastError = error;
 
-  // Only a normal-width line counts (not a sensor bar lying along the line mid-spin)
-  if (lines == 1 && labs(error) < 1000 && strongBlack <= 4) straightCount++;
-  if (labs(error) > SHARP_ERROR) straightCount = 0;     // sharp turn: not driving straight
+  // Only a normal-width line counts: not a sensor bar lying along the line mid-spin,
+  // and not the end bar coming in at an angle (that also pulls the error sideways)
+  bool normalLine = lines == 1 && strongBlack <= normalWidth;
+  if (normalLine && labs(error) < 1000) {
+    straightCount++;
+    lineWidth += 0.01 * (strongBlack - lineWidth);    // keep learning the line width
+  }
+  if (normalLine && labs(error) > SHARP_ERROR) straightCount = 0;   // sharp turn
 
   float correction = KP * error;
 
