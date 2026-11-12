@@ -1,7 +1,10 @@
 // STEP 4: Full course.
 // Drive over the start bar -> follow the line -> U-turn at the end bar ->
 // follow the line back -> stop at the start bar.
-// Line following is Step 3 plus: on sharp turns the inner wheel goes backwards.
+// Line following is Step 3 plus:
+//   - on sharp turns the inner wheel goes backwards
+//   - if two lines are under the sensors (hairpins), it keeps the one it was following
+//   - stricter end-bar check so hairpins are not mistaken for the end bar
 #include <ECE3.h>
 
 uint16_t sensors[8];
@@ -18,6 +21,8 @@ const int RIGHT_PWM   = 39;
 
 const int LED_FRONT_RIGHT = 41;
 const int LED_FRONT_LEFT  = 51;
+const int LED_BACK_LEFT   = 57;
+const int LED_BACK_RIGHT  = 58;
 
 // ---- Numbers you can change ----
 const int   BASE_SPEED = 50;     // how fast it drives
@@ -29,6 +34,10 @@ const int   SPIN_SPEED = 50;     // how fast it spins for the U-turn
 const int   SHARP_ERROR = 2000;  // line under the outer 2 sensors on either side
 const float KP_SHARP    = 0.05;  // extra steering beyond SHARP_ERROR
 const int   MAX_REVERSE = 50;    // fastest a wheel may go backwards
+
+// Bars (end bar, start bar) are ignored for this long after the start and after
+// the U-turn. The robot cannot reach a bar sooner than this.
+const unsigned long BAR_IGNORE_MS = 10000;
 // ---------------------------------
 
 // What the robot is doing right now
@@ -41,14 +50,19 @@ const int DONE  = 4;   // stopped at the start bar
 int phase = START;
 unsigned long phaseStart = 0;   // when the current phase began
 
-long weighted = 0;
+int  v[8];                      // each sensor: 0 = white .. 1000 = black
+long weighted = 0;              // sums for the line we are following
 long total = 0;
-int blackSensors = 0;
+int  blackSensors = 0;          // how many sensors see black
+int  strongBlack = 0;           // how many sensors see very black
+int  lines = 0;                 // how many separate lines are under the sensors
 bool centerBlack = false;       // middle sensors (3 and 4) see black
 
+long lastPosition = 3500;       // where the line was last time (0 = right, 7000 = left)
 long lastError = 0;
 unsigned long lostTime = 0;
-int allBlackCount = 0;
+int  allBlackCount = 0;
+int  straightCount = 0;         // readings in a row driving straight on a single line
 bool sawStartBar = false;
 bool everSawLine = false;
 bool offEndBar = false;
@@ -77,20 +91,48 @@ void setPhase(int p) {
 void readSensors() {
   ECE3_read_IR(sensors);
 
-  weighted = 0;
-  total = 0;
   blackSensors = 0;
+  strongBlack = 0;
   centerBlack = false;
 
   // Sensor 0 is on the RIGHT, sensor 7 on the LEFT
   for (int i = 0; i < 8; i++) {
-    long v = ((long)sensors[i] - sensorMin[i]) * 1000L / (sensorMax[i] - sensorMin[i]);
-    v = constrain(v, 0L, 1000L);
-    if (v < 300) v = 0;
-    if (v > 0) blackSensors++;
-    if (v > 0 && (i == 3 || i == 4)) centerBlack = true;
-    weighted += v * i * 1000L;
-    total += v;
+    long x = ((long)sensors[i] - sensorMin[i]) * 1000L / (sensorMax[i] - sensorMin[i]);
+    x = constrain(x, 0L, 1000L);
+    if (x < 300) x = 0;
+    v[i] = x;
+    if (x > 0) blackSensors++;
+    if (x > 700) strongBlack++;
+    if (x > 0 && (i == 3 || i == 4)) centerBlack = true;
+  }
+
+  // Find each separate line under the sensors. If there are two (at hairpins,
+  // where the track runs close to itself), keep the one nearest to where the
+  // line was last time, so the robot does not jump onto the wrong piece of track.
+  weighted = 0;
+  total = 0;
+  lines = 0;
+  long bestDistance = 100000;
+  int i = 0;
+  while (i < 8) {
+    if (v[i] == 0) {
+      i++;
+      continue;
+    }
+    long w = 0;
+    long t = 0;
+    while (i < 8 && v[i] > 0) {
+      w += (long)v[i] * i * 1000L;
+      t += v[i];
+      i++;
+    }
+    lines++;
+    long distance = labs(w / t - lastPosition);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      weighted = w;
+      total = t;
+    }
   }
 }
 
@@ -105,6 +147,8 @@ void setup() {
   pinMode(RIGHT_PWM, OUTPUT);
   pinMode(LED_FRONT_RIGHT, OUTPUT);
   pinMode(LED_FRONT_LEFT, OUTPUT);
+  pinMode(LED_BACK_LEFT, OUTPUT);
+  pinMode(LED_BACK_RIGHT, OUTPUT);
 
   drive(0, 0);
   digitalWrite(LEFT_SLEEP, HIGH);
@@ -141,7 +185,11 @@ void loop() {
     if (blackSensors == 0) offEndBar = true;  // sensors have swung off the end bar
     if (offEndBar && centerBlack) {           // found the line we came in on
       lastError = 0;
+      lastPosition = 3500;
       lostTime = 0;
+      straightCount = 0;
+      digitalWrite(LED_BACK_LEFT, LOW);
+      digitalWrite(LED_BACK_RIGHT, LOW);
       digitalWrite(LED_FRONT_LEFT, HIGH);     // front LEDs on = on the way back
       digitalWrite(LED_FRONT_RIGHT, HIGH);
       setPhase(BACK);
@@ -152,9 +200,13 @@ void loop() {
   }
 
   // ---------- OUT or BACK: watch for a bar ----------
-  // Bars are ignored for 1 s after the start / U-turn. 3 readings in a row are
-  // needed so one glitchy reading ("phantom crosspiece") does not count.
-  if (blackSensors >= 7 && timeInPhase > 1000) {
+  // It only counts as a bar if:
+  //   - 7 or more sensors are very black, 3 readings in a row (ignores one-off glitches)
+  //   - the robot was driving straight on a single line just before (bars come after
+  //     straights; hairpins do not)
+  //   - enough time has passed since the start / U-turn
+  bool looksLikeBar = strongBlack >= 7 && straightCount >= 50 && timeInPhase > BAR_IGNORE_MS;
+  if (looksLikeBar) {
     allBlackCount++;
     if (allBlackCount >= 3) {
       allBlackCount = 0;
@@ -162,6 +214,8 @@ void loop() {
       if (phase == OUT) {
         delay(200);             // let the robot settle before spinning
         offEndBar = false;
+        digitalWrite(LED_BACK_LEFT, HIGH);    // back LEDs on = doing the U-turn
+        digitalWrite(LED_BACK_RIGHT, HIGH);
         setPhase(UTURN);
       } else {
         setPhase(DONE);         // back at the start bar
@@ -172,8 +226,9 @@ void loop() {
     allBlackCount = 0;
   }
 
-  // ---------- Follow the line (same as Step 3) ----------
+  // ---------- Follow the line ----------
   if (total == 0) {
+    straightCount = 0;
     // Not found the line yet after the start: keep going straight
     if (!everSawLine) {
       drive(BASE_SPEED, BASE_SPEED);
@@ -193,9 +248,15 @@ void loop() {
   lostTime = 0;
   everSawLine = true;
 
+  long position = weighted / total;
+  lastPosition = position;
+
   // error > 0 means the line is to the RIGHT
-  long error = 3500 - weighted / total;
+  long error = 3500 - position;
   lastError = error;
+
+  if (lines == 1 && labs(error) < 1000) straightCount++;
+  else straightCount = 0;
 
   float correction = KP * error;
 
