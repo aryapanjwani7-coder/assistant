@@ -36,6 +36,18 @@ const int LED_BACK_RIGHT  = 58;
 // Front bump switches (course pin chart). Press any of them to stop the robot.
 const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 
+// ---- Test one part of the track at a time ----
+// TEST_START_DIST: 0 = normal start from the start box. Otherwise put the robot ON
+//   THE LINE at that point of the track (map distance), facing the way it drives.
+// TEST_STOP_DIST: 0 = full run. Otherwise it stops there and prints the map.
+//   Part 1: start box -> before T3   START 0,    STOP 1150
+//   Part 2: before T3 -> after T5    START 1150, STOP 2450
+//   Part 3: after T5  -> after T6    START 2450, STOP 4100
+//   Part 4: after T6  -> before T16  START 4100, STOP 6450
+//   Part 5: before T16 -> end bar -> U-turn -> back past T16   START 6450, STOP 8600
+const long TEST_START_DIST = 0;
+const long TEST_STOP_DIST  = 1150;
+
 // ---- Numbers you can change ----
 const int   BASE_SPEED = 50;     // how fast it drives
 const float KP         = 0.014;  // how hard it steers
@@ -508,6 +520,20 @@ void setup() {
   runStart = millis();
   segStartTime = runStart;
   setPhase(START);
+
+  // Testing a part that starts in the middle of the track: the robot is already
+  // on the line, so skip the start bar and set the distance to that point
+  if (TEST_START_DIST > 0) {
+    everSawLine = true;
+    outEndDist = MAP_OUT_END;
+    if (TEST_START_DIST < MAP_OUT_END) {
+      setPhase(OUT);
+    } else {
+      setPhase(BACK);
+      backStartDist = MAP_BACK_START;
+    }
+    travel2 = 2 * TEST_START_DIST;
+  }
 }
 
 void loop() {
@@ -582,6 +608,13 @@ void loop() {
   }
 
   long distNow = travel2 / 2;
+
+  // Testing one part: stop at the end of the part (on the right leg) and print the map
+  bool stopLegOut = TEST_STOP_DIST <= MAP_OUT_END;
+  if (TEST_STOP_DIST > 0 && distNow >= TEST_STOP_DIST && (phase == OUT) == stopLegOut) {
+    setPhase(DONE);
+    return;
+  }
 
   // ---------- Planned turn (T6) in progress ----------
   if (plannedStep > 0) {
