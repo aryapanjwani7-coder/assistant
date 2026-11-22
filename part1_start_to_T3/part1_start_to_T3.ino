@@ -28,15 +28,16 @@ const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 // PRE_T1_SPEED. The robot brakes early enough to reach each section at its speed.
 const int  NUM_ZONES = 3;
 const long ZONE_END[NUM_ZONES]   = {  330,  450, 1150 };
-const int  ZONE_SPEED[NUM_ZONES] = {   60,   90,   85 };
+const int  ZONE_SPEED[NUM_ZONES] = {   60,  110,  100 };
 //                                  rest of T1  T1->T2  T2 horseshoe
 const int  START_SPEED = 50;     // driving straight from the box to the line
 const int  PRE_T1_SPEED = 55;    // following the line before T1 (distance not lined up yet)
+const int  JOIN_SPEED = 45;      // just after finding the line, until it is centered
 const int  BRAKE_COUNTS = 3;     // counts needed to lose 1 unit of speed
 
 const float KP = 0.014;          // steering (tuned at speed 50, scaled up with speed)
 const float KD = 0.07;           // damping
-const float FF_GAIN = 0.6;       // steer into the curves from the map (0 = off).
+const float FF_GAIN = 0.8;       // steer into the curves from the map (0 = off).
                                  // Runs wide on T2 -> raise. Cuts inside -> lower.
 const int   SHARP_ERROR = 2000;  // line near the edge: steer harder
 const float KP_SHARP    = 0.08;  // run 1: lost the line at T1 with 0.05
@@ -55,10 +56,16 @@ const int  MAP_TURN[MAP_N] = {  322,   28, -120, -214, -135, -249,  -73 };
 // line following handles T1.
 const bool MAP_ROUND[MAP_N] = { false, false, true, true, true, true, true };
 const long START_BAR_DIST = 147; // where the map starts
-// T1 is the landmark: once the robot has turned right this much (about 60 degrees)
-// after finding the line, it is part-way round T1, at this map distance.
+// T1 is the first landmark: once the robot has turned right this much (about 60
+// degrees), counted from where it stopped turning left (some boxes join the line
+// with a left turn), it is part-way round T1, at this map distance.
 const long T1_SYNC_TURN = 200;
-const long T1_SYNC_DIST = 250;
+const long T1_SYNC_DIST = 240;
+// The horseshoe entry is the second landmark: after T1, the first time the robot
+// has turned left this much within the last 60 counts, it is at this map distance.
+// The planned horseshoe steering only starts once this has happened.
+const long HS_SYNC_TURN = -45;
+const long HS_SYNC_DIST = 520;
 const long PART_END = 1150;      // stop here (short straight heading into T3)
 
 // ---------- state ----------
@@ -71,7 +78,14 @@ bool firstReading = true;
 int  speedNow = START_SPEED;
 bool started = false;            // found the line after leaving the box
 bool synced = false;             // distance lined up with the map at T1
+bool hsSynced = false;           // lined up again at the horseshoe entry
+bool joined = false;             // centered on the line after finding it
+int  centeredReads = 0;
 long turnSinceStart = 0;         // turning since the line was found (+ = right)
+long minTurn = 0;                // most left it has turned (for the T1 check)
+// turning over the last 3 chunks of 20 counts (for the horseshoe entry check)
+long chunkTravel2 = 0, chunkTurn = 0;
+long chunkTurns[3] = { 0, 0, 0 };
 bool everSawLine = false;
 bool done = false;
 unsigned long lostTime = 0;
@@ -132,6 +146,16 @@ void updateEncoders() {
   travel2 += dl + dr;
   if (started) {
     turnSinceStart += dl - dr;
+    if (turnSinceStart < minTurn) minTurn = turnSinceStart;
+    chunkTravel2 += dl + dr;
+    chunkTurn += dl - dr;
+    if (chunkTravel2 >= 40) {                  // every 20 counts of travel
+      chunkTurns[0] = chunkTurns[1];
+      chunkTurns[1] = chunkTurns[2];
+      chunkTurns[2] = chunkTurn;
+      chunkTravel2 = 0;
+      chunkTurn = 0;
+    }
     segTravel2 += dl + dr;
     segTurn += dl - dr;
     if (segTravel2 >= 300) saveLog();
@@ -175,6 +199,26 @@ int pieceAt(long d) {
   return -1;
 }
 
+// Planned curve at this distance, blended smoothly between the middles of the map
+// pieces (turn counts per count travelled; + = right). Only the round pieces.
+float mapCurve(long d) {
+  float c[MAP_N];
+  long mid[MAP_N];
+  for (int i = 0; i < MAP_N; i++) {
+    long start = (i == 0) ? START_BAR_DIST : MAP_END[i - 1];
+    c[i] = MAP_ROUND[i] ? (float)MAP_TURN[i] / (MAP_END[i] - start) : 0;
+    mid[i] = (start + MAP_END[i]) / 2;
+  }
+  if (d <= mid[0]) return c[0];
+  for (int i = 0; i < MAP_N - 1; i++) {
+    if (d <= mid[i + 1]) {
+      float f = (float)(d - mid[i]) / (mid[i + 1] - mid[i]);
+      return c[i] + f * (c[i + 1] - c[i]);
+    }
+  }
+  return 0;                                    // past the end of the map: straight
+}
+
 // Speed for this distance: each zone ahead allows its speed plus the room left to brake
 int targetSpeed(long d) {
   long best = 255;
@@ -196,6 +240,7 @@ void printLog() {
   Serial.print("part_time_ms ");  Serial.println(partTime);
   Serial.print("end_dist ");      Serial.println(travel2 / 2);
   Serial.print("synced_at_T1 ");  Serial.println(synced ? 1 : 0);
+  Serial.print("synced_at_horseshoe "); Serial.println(hsSynced ? 1 : 0);
   Serial.print("ff_gain ");       Serial.println(FF_GAIN);
   Serial.print("pre_t1_speed "); Serial.println(PRE_T1_SPEED);
   Serial.print("kp_sharp ");     Serial.println(KP_SHARP);
@@ -285,13 +330,22 @@ void loop() {
   }
 
   // ----- Line the distance up with the map at T1 (first big right turn) -----
-  if (!synced && turnSinceStart >= T1_SYNC_TURN) {
+  if (!synced && turnSinceStart - minTurn >= T1_SYNC_TURN) {
     synced = true;
     travel2 = 2 * T1_SYNC_DIST;
+    dist = T1_SYNC_DIST;
+  }
+  // ----- ...and again where the horseshoe starts curving left -----
+  if (synced && !hsSynced && dist > T1_SYNC_DIST + 80 &&
+      chunkTurns[0] + chunkTurns[1] + chunkTurns[2] <= HS_SYNC_TURN) {
+    hsSynced = true;
+    travel2 = 2 * HS_SYNC_DIST;
+    dist = HS_SYNC_DIST;
   }
 
   // ----- Speed -----
   int target = synced ? targetSpeed(dist) : PRE_T1_SPEED;
+  if (!joined) target = JOIN_SPEED;           // ease onto the line first
   if (speedNow < target) speedNow += 2;       // speed up gently
   if (speedNow > target) speedNow = target;   // slow down at once
 
@@ -336,11 +390,8 @@ void loop() {
   if (speedNow > 50) correction = correction * speedNow / 50;   // faster -> steer more
 
   // Steer into the curve the map says is here (a little ahead)
-  int p = synced ? pieceAt(dist + 30) : -1;
-  if (p >= 0 && MAP_ROUND[p]) {
-    long len = MAP_END[p] - ((p == 0) ? START_BAR_DIST : MAP_END[p - 1]);
-    correction += FF_GAIN * speedNow * ((float)MAP_TURN[p] / len) / 2;
-  }
+  // (only once lined up at the horseshoe entry, so it never turns early)
+  if (hsSynced) correction += FF_GAIN * speedNow * mapCurve(dist + 30) / 2;
 
   int maxSpeed = speedNow * 2;
   if (maxSpeed < 100) maxSpeed = 100;
@@ -348,6 +399,13 @@ void loop() {
   int left  = constrain((int)(speedNow + correction), -MAX_REVERSE, maxSpeed);
   int right = constrain((int)(speedNow - correction), -MAX_REVERSE, maxSpeed);
   drive(left, right);
+
+  // Joined: line centered for a moment after finding it
+  if (!joined) {
+    if (labs(error) < 800) centeredReads++;
+    else centeredReads = 0;
+    if (centeredReads >= 20) joined = true;
+  }
 
   // for the log
   if (labs(error) > segMaxErr) segMaxErr = labs(error);
