@@ -1,8 +1,22 @@
-// PART 1 ONLY: start box -> T1 -> T2 horseshoe -> stops before T3.
-// Works from any of the 4 start boxes: it drives straight until it finds the line,
-// follows it at a safe speed, and lines its distance up with the map at T1.
-// When it stops (all four LEDs on), plug in USB, open the Serial Monitor (9600)
-// and copy the PART 1 block. Press a front bump switch to stop it any time.
+// PART 1 ONLY: start box -> T1 -> T2 horseshoe -> stops on the way to T3.
+//
+// Part 1 is driven as a PLAN, not by reacting to the line:
+//   1. LAUNCH    straight out of the box (any of the 4 boxes) until it sees the line
+//   2. JOIN      ease onto the line until it is centered
+//   3. TO T1     follow the line until the track starts curving right (T1)
+//   4. T1 ARC    one smooth right arc at constant speed
+//   5. STRAIGHT  fixed distance at full speed, holding straight
+//   6. HORSESHOE one smooth left arc at constant speed
+//   7. EXIT      normal line following, then stop
+// In the planned steps (4, 5, 6) the line sensors only make slight corrections.
+//
+// FOUR RUNS IN A ROW, one from each start box:
+//   Put it in box 1 and press RESET. It runs Part 1 and stops.
+//   The LEDs blink for 6 seconds: move it to box 2. It starts by itself. Same for 3, 4.
+//   After run 4 all four LEDs stay on: plug in USB, open the Serial Monitor (9600)
+//   and copy everything from PART 1 START to PART 1 END.
+// A front bump switch ends the current run (then the 6 second wait for the next box).
+// Bump switches are ignored while you move it between boxes.
 #include <ECE3.h>
 
 uint16_t sensors[8];
@@ -23,90 +37,88 @@ const int LED_BACK_LEFT   = 57;
 const int LED_BACK_RIGHT  = 58;
 const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 
-// ================= Numbers to tune =================
-// Speed for each section of Part 1 after T1 (map distance). Before T1 it drives at
-// PRE_T1_SPEED. The robot brakes early enough to reach each section at its speed.
-const int  NUM_ZONES = 3;
-const long ZONE_END[NUM_ZONES]   = {  330,  450, 1150 };
-const int  ZONE_SPEED[NUM_ZONES] = {   70,  160,  150 };
-//                                  rest of T1  T1->T2  T2 horseshoe
-const int  START_SPEED = 100;    // jump start: straight out of the box to the line
-const int  PRE_T1_SPEED = 70;    // following the line before T1 (distance not lined up yet)
-const int  JOIN_SPEED = 70;      // just after finding the line, until it is centered
-const int  BRAKE_COUNTS = 3;     // counts needed to lose 1 unit of speed
+// ================= The plan (numbers to tune) =================
+// Turn amounts are in encoder turn counts (+ = right, - = left, about 3.3 = 1 degree).
+// Lengths are encoder counts of travel.
+const int  LAUNCH_SPEED = 100;   // 1. straight out of the box
+const int  JOIN_SPEED   = 70;    // 2. easing onto the line
+const int  TO_T1_SPEED  = 70;    // 3. following the line up to T1
 
+const int  T1_SPEED  = 80;       // 4. T1 arc: speed
+const long T1_TURN   = 280;      //    turn after T1 is detected (T1 is ~100 degrees)
+const long T1_LENGTH = 140;      //    over this distance
+
+const int  STRAIGHT_SPEED  = 160; // 5. straight: speed
+const long STRAIGHT_LENGTH = 140; //    distance (ends early if the horseshoe starts)
+
+const int  HS_SPEED  = 150;      // 6. horseshoe arc: speed
+const long HS_TURN   = -770;     //    total turn (about 230 degrees left)
+const long HS_LENGTH = 720;      //    over this distance
+
+const int  RUNS = 4;             // runs in a row (one per start box)
+const unsigned long WAIT_MS = 6000;  // time to move it to the next box
+
+const int  EXIT_SPEED  = 100;    // 7. after the horseshoe
+const long EXIT_LENGTH = 60;     //    then stop
+
+// Detecting where a curve starts: turned this much within the last 60 counts
+const long CURVE_DETECT = 45;
+
+// Line following
 const float KP = 0.014;          // steering (tuned at speed 50, scaled up with speed)
 const float KD = 0.07;           // damping
-const float FF_GAIN = 1.0;       // drive the planned curve from the map (0 = off, 1 = full).
-                                 // Runs wide on T2 -> raise. Cuts inside -> lower.
-const int   SHARP_ERROR = 2000;  // line near the edge: steer harder
-const float KP_SHARP    = 0.12;  // hard steering at the edge (T1 is a sharp corner)
+const float PLAN_KP = 0.5;       // line corrections in the planned steps (1 = normal)
+                                 // (full strength again if the line is far off)
+const int   SHARP_ERROR = 2000;  // line near the edge: steer harder (safety net)
+const float KP_SHARP    = 0.12;
 const int   MAX_REVERSE = 80;    // inner wheel may go this fast backwards
 const int   SEARCH_SPEED = 80;   // spin speed if the line is lost
-const float CURVE_KP_FACTOR = 0.6; // in the horseshoe: line following only nudges
-                                   // (full strength again if the line is far off)
-// ===================================================
+// ==============================================================
 
-// Shape of Part 1 from the map runs (average of 3): turn per piece of ~150 counts.
-// + = right, - = left, about 3.3 = 1 degree.
-const int  MAP_N = 7;
-const long MAP_END[MAP_N]  = {  297,  449,  600,  751,  902, 1053, 1204 };
-const int  MAP_TURN[MAP_N] = {  322,   28, -120, -214, -135, -249,  -73 };
-//                              T1          T2 horseshoe (about 230 degrees left)
-// Steer into the curve from the map only on the round T2 horseshoe. T1 is a
-// corner (the map can't say exactly where in its piece it starts), so normal
-// line following handles T1.
-const bool MAP_ROUND[MAP_N] = { false, false, true, true, true, true, true };
-const long START_BAR_DIST = 147; // where the map starts
-// T1 is the first landmark: once the robot has turned right this much (about 60
-// degrees), counted from where it stopped turning left (some boxes join the line
-// with a left turn), it is part-way round T1, at this map distance.
-const long T1_SYNC_TURN = 200;
-const long T1_SYNC_DIST = 240;
-// The horseshoe entry is the second landmark: after T1, the first time the robot
-// has turned left this much within the last 60 counts, it is at this map distance.
-// The planned horseshoe steering only starts once this has happened.
-const long HS_SYNC_TURN = -45;
-const long HS_SYNC_DIST = 520;
-const long PART_END = 1150;      // stop here (short straight heading into T3)
+// Steps
+const int LAUNCH = 0, JOIN = 1, TO_T1 = 2, T1_ARC = 3, STRAIGHT = 4, HS_ARC = 5, EXIT = 6, DONE = 7;
+const char* STEP_NAMES[] = { "launch", "join", "toT1", "T1arc", "straight", "horseshoe", "exit", "done" };
+int  run = 0;                    // which run (0..3 = box 1..4)
+bool waiting = false;            // between runs: waiting to be moved to the next box
+bool allDone = false;            // all runs finished
+unsigned long waitStart = 0;
+unsigned long runStart = 0;
+int  step = LAUNCH;
+long stepStartDist = 0;          // distance when this step began
+long stepStartTurn = 0;          // turn total when this step began
 
 // ---------- state ----------
 int  v[8];
 long weighted = 0, total = 0;
-int  blackSensors = 0, strongBlack = 0, lines = 0;
+int  blackSensors = 0, strongBlack = 0;
 long lastPosition = 3500;
 long lastError = 0;
 bool firstReading = true;
-int  speedNow = START_SPEED;
-bool started = false;            // found the line after leaving the box
-bool synced = false;             // distance lined up with the map at T1
-bool hsSynced = false;           // lined up again at the horseshoe entry
-bool joined = false;             // centered on the line after finding it
+int  speedNow = LAUNCH_SPEED;
 int  centeredReads = 0;
-long turnSinceStart = 0;         // turning since the line was found (+ = right)
-long minTurn = 0;                // most left it has turned (for the T1 check)
-// turning over the last 3 chunks of 20 counts (for the horseshoe entry check)
-long chunkTravel2 = 0, chunkTurn = 0;
-long chunkTurns[3] = { 0, 0, 0 };
-bool everSawLine = false;
-bool done = false;
 unsigned long lostTime = 0;
 bool spinRight = false;
-unsigned long startTime = 0;     // when it crossed the start bar
-unsigned long partTime = 0;
 
 int  leftCmd = 0, rightCmd = 0;
 long prevL = 0, prevR = 0;
 long travel2 = 0;                // distance x2 (left + right counts)
+long turnTotal = 0;              // all turning so far (+ = right)
+// turning over the last 3 chunks of 20 counts (to detect where a curve starts)
+long chunkTravel2 = 0, chunkTurn = 0;
+long chunkTurns[3] = { 0, 0, 0 };
 
-// log, one line per ~150 counts
+// log for each run, one line per ~150 counts (and one at every step change)
 const int LOG_MAX = 30;
-long logDist[LOG_MAX];
-int  logTurn[LOG_MAX], logMs[LOG_MAX], logMaxErr[LOG_MAX], logSpeed[LOG_MAX], logLost[LOG_MAX];
-int  logAvgErr[LOG_MAX];
-int  logCount = 0;
-long segTravel2 = 0, segTurn = 0, segMaxErr = 0, segSpeedSum = 0, segReads = 0;
-long segErrSum = 0;
+long logDist[RUNS][LOG_MAX];
+int  logTurn[RUNS][LOG_MAX], logMs[RUNS][LOG_MAX], logMaxErr[RUNS][LOG_MAX], logSpeed[RUNS][LOG_MAX];
+int  logLost[RUNS][LOG_MAX], logAvgErr[RUNS][LOG_MAX], logStep[RUNS][LOG_MAX];
+int  logCount[RUNS];
+unsigned long runTime[RUNS];
+int  runReached[RUNS];
+long launchDist[RUNS];           // how far it drove before seeing the line
+int  lineSide[RUNS];             // where the line first appeared: -1 left, 1 right, 0 middle
+long joinTurn[RUNS];             // how much it turned to get onto the line
+long segTravel2 = 0, segTurn = 0, segMaxErr = 0, segSpeedSum = 0, segReads = 0, segErrSum = 0;
 int  segLost = 0;
 unsigned long segStart = 0;
 unsigned long lastPrint = 0;
@@ -129,19 +141,29 @@ void drive(int left, int right) {
 }
 
 void saveLog() {
-  if (logCount < LOG_MAX && segReads > 0) {
-    logDist[logCount] = travel2 / 2;
-    logTurn[logCount] = segTurn;
-    logMs[logCount] = nowMs() - segStart;
-    logMaxErr[logCount] = segMaxErr;
-    logSpeed[logCount] = segSpeedSum / segReads;
-    logLost[logCount] = segLost;
-    logAvgErr[logCount] = segErrSum / segReads;
-    logCount++;
+  int n = logCount[run];
+  if (n < LOG_MAX && segReads > 0) {
+    logDist[run][n] = travel2 / 2;
+    logTurn[run][n] = segTurn;
+    logMs[run][n] = nowMs() - segStart;
+    logMaxErr[run][n] = segMaxErr;
+    logSpeed[run][n] = segSpeedSum / segReads;
+    logLost[run][n] = segLost;
+    logAvgErr[run][n] = segErrSum / segReads;
+    logStep[run][n] = step;
+    logCount[run] = n + 1;
   }
-  segTravel2 = 0; segTurn = 0; segMaxErr = 0; segSpeedSum = 0; segReads = 0; segLost = 0;
-  segErrSum = 0;
+  segTravel2 = 0; segTurn = 0; segMaxErr = 0; segSpeedSum = 0; segReads = 0;
+  segErrSum = 0; segLost = 0;
   segStart = nowMs();
+}
+
+void setStep(int s) {
+  saveLog();                     // one log line per step, so each step can be judged
+  if (step == JOIN) joinTurn[run] = turnTotal;
+  step = s;
+  stepStartDist = travel2 / 2;
+  stepStartTurn = turnTotal;
 }
 
 // Encoders: distance travelled and turning (direction comes from the motor command)
@@ -155,22 +177,25 @@ void updateEncoders() {
   if (leftCmd < 0) dl = -dl;
   if (rightCmd < 0) dr = -dr;
   travel2 += dl + dr;
-  if (started) {
-    turnSinceStart += dl - dr;
-    if (turnSinceStart < minTurn) minTurn = turnSinceStart;
-    chunkTravel2 += dl + dr;
-    chunkTurn += dl - dr;
-    if (chunkTravel2 >= 40) {                  // every 20 counts of travel
-      chunkTurns[0] = chunkTurns[1];
-      chunkTurns[1] = chunkTurns[2];
-      chunkTurns[2] = chunkTurn;
-      chunkTravel2 = 0;
-      chunkTurn = 0;
-    }
+  turnTotal += dl - dr;
+  chunkTravel2 += dl + dr;
+  chunkTurn += dl - dr;
+  if (chunkTravel2 >= 40) {      // every 20 counts of travel
+    chunkTurns[0] = chunkTurns[1];
+    chunkTurns[1] = chunkTurns[2];
+    chunkTurns[2] = chunkTurn;
+    chunkTravel2 = 0;
+    chunkTurn = 0;
+  }
+  if (step != LAUNCH) {
     segTravel2 += dl + dr;
     segTurn += dl - dr;
     if (segTravel2 >= 300) saveLog();
   }
+}
+
+long recentTurn() {
+  return chunkTurns[0] + chunkTurns[1] + chunkTurns[2];
 }
 
 void readSensors() {
@@ -188,109 +213,88 @@ void readSensors() {
   // If two separate lines are seen, follow the one nearest to where the line was
   weighted = 0;
   total = 0;
-  lines = 0;
   long best = 100000;
   int i = 0;
   while (i < 8) {
     if (v[i] == 0) { i++; continue; }
     long w = 0, t = 0;
     while (i < 8 && v[i] > 0) { w += (long)v[i] * i * 1000L; t += v[i]; i++; }
-    lines++;
     long d = labs(w / t - lastPosition);
     if (d < best) { best = d; weighted = w; total = t; }
   }
 }
 
-// Which map piece we are in (-1 = off the map)
-int pieceAt(long d) {
-  for (int i = 0; i < MAP_N; i++) {
-    long start = (i == 0) ? START_BAR_DIST : MAP_END[i - 1];
-    if (d >= start && d <= MAP_END[i]) return i;
-  }
-  return -1;
-}
-
-// Planned curve at this distance, blended smoothly between the middles of the map
-// pieces (turn counts per count travelled; + = right). Only the round pieces.
-float mapCurve(long d) {
-  float c[MAP_N];
-  long mid[MAP_N];
-  for (int i = 0; i < MAP_N; i++) {
-    long start = (i == 0) ? START_BAR_DIST : MAP_END[i - 1];
-    c[i] = MAP_ROUND[i] ? (float)MAP_TURN[i] / (MAP_END[i] - start) : 0;
-    mid[i] = (start + MAP_END[i]) / 2;
-  }
-  if (d <= mid[0]) return c[0];
-  for (int i = 0; i < MAP_N - 1; i++) {
-    if (d <= mid[i + 1]) {
-      float f = (float)(d - mid[i]) / (mid[i + 1] - mid[i]);
-      return c[i] + f * (c[i + 1] - c[i]);
-    }
-  }
-  return 0;                                    // past the end of the map: straight
-}
-
-// Speed for this distance: each zone ahead allows its speed plus the room left to brake
-int targetSpeed(long d) {
-  long best = 255;
-  long zoneStart = 0;
-  for (int z = 0; z < NUM_ZONES; z++) {
-    if (ZONE_END[z] >= d) {
-      long allowed = ZONE_SPEED[z];
-      if (zoneStart > d) allowed += (zoneStart - d) / BRAKE_COUNTS;
-      if (allowed < best) best = allowed;
-    }
-    zoneStart = ZONE_END[z];
-  }
-  return best;
-}
-
 void printLog() {
   Serial.println();
   Serial.println("===== PART 1 START (copy from here) =====");
-  Serial.print("part_time_ms ");  Serial.println(partTime);
-  Serial.print("end_dist ");      Serial.println(travel2 / 2);
-  Serial.print("synced_at_T1 ");  Serial.println(synced ? 1 : 0);
-  Serial.print("synced_at_horseshoe "); Serial.println(hsSynced ? 1 : 0);
-  Serial.print("ff_gain ");       Serial.println(FF_GAIN);
-  Serial.print("curve_kp ");      Serial.println(CURVE_KP_FACTOR);
-  Serial.print("start_speed ");  Serial.println(START_SPEED);
-  Serial.print("pre_t1_speed "); Serial.println(PRE_T1_SPEED);
-  Serial.print("kp_sharp ");     Serial.println(KP_SHARP);
-  Serial.print("zone_speeds ");
-  for (int z = 0; z < NUM_ZONES; z++) { Serial.print(ZONE_SPEED[z]); Serial.print(' '); }
-  Serial.println();
-  // avgerr: average line position. In a LEFT curve (the horseshoe):
-  //   negative = line on the robot's left  = robot running WIDE (outside)
-  //   positive = line on the robot's right = robot CUTTING INSIDE
-  Serial.println("dist,turn,lost,ms,maxerr,speed,avgerr");
-  for (int i = 0; i < logCount; i++) {
-    Serial.print(logDist[i]);   Serial.print(',');
-    Serial.print(logTurn[i]);   Serial.print(',');
-    Serial.print(logLost[i]);   Serial.print(',');
-    Serial.print(logMs[i]);     Serial.print(',');
-    Serial.print(logMaxErr[i]); Serial.print(',');
-    Serial.print(logSpeed[i]);  Serial.print(',');
-    Serial.println(logAvgErr[i]);
+  Serial.print("t1 ");    Serial.print(T1_SPEED);  Serial.print(' '); Serial.print(T1_TURN);
+  Serial.print(' ');      Serial.println(T1_LENGTH);
+  Serial.print("straight "); Serial.print(STRAIGHT_SPEED); Serial.print(' '); Serial.println(STRAIGHT_LENGTH);
+  Serial.print("horseshoe "); Serial.print(HS_SPEED); Serial.print(' '); Serial.print(HS_TURN);
+  Serial.print(' ');      Serial.println(HS_LENGTH);
+  Serial.print("plan_kp "); Serial.println(PLAN_KP);
+  for (int r = 0; r < RUNS; r++) {
+    Serial.print("--- box "); Serial.print(r + 1);
+    Serial.print(": time_ms "); Serial.print(runTime[r]);
+    Serial.print(", reached "); Serial.print(STEP_NAMES[runReached[r]]);
+    Serial.print(", launch_dist "); Serial.print(launchDist[r]);
+    Serial.print(", line_side "); Serial.print(lineSide[r]);
+    Serial.print(", join_turn "); Serial.println(joinTurn[r]);
+    // avgerr: average line position. - = line on the robot's LEFT, + = on its RIGHT.
+    // In the LEFT horseshoe: - means running wide (outside), + means cutting inside.
+    // In the RIGHT T1 arc:   + means running wide (outside), - means cutting inside.
+    Serial.println("step,dist,turn,lost,ms,maxerr,speed,avgerr");
+    for (int i = 0; i < logCount[r]; i++) {
+      Serial.print(STEP_NAMES[logStep[r][i]]); Serial.print(',');
+      Serial.print(logDist[r][i]);   Serial.print(',');
+      Serial.print(logTurn[r][i]);   Serial.print(',');
+      Serial.print(logLost[r][i]);   Serial.print(',');
+      Serial.print(logMs[r][i]);     Serial.print(',');
+      Serial.print(logMaxErr[r][i]); Serial.print(',');
+      Serial.print(logSpeed[r][i]);  Serial.print(',');
+      Serial.println(logAvgErr[r][i]);
+    }
   }
   Serial.println("===== PART 1 END (copy to here) =====");
 }
 
-void finish() {
+// Start a fresh run from the box the robot is in now
+void startRun() {
+  step = LAUNCH;
+  stepStartDist = 0;
+  stepStartTurn = 0;
+  travel2 = 0;
+  turnTotal = 0;
+  chunkTravel2 = 0;
+  chunkTurn = 0;
+  chunkTurns[0] = chunkTurns[1] = chunkTurns[2] = 0;
+  lastPosition = 3500;
+  lastError = 0;
+  firstReading = true;
+  speedNow = LAUNCH_SPEED;
+  centeredReads = 0;
+  lostTime = 0;
+  segTravel2 = 0; segTurn = 0; segMaxErr = 0; segSpeedSum = 0; segReads = 0;
+  segErrSum = 0; segLost = 0;
+  prevL = getEncoderCount_left();
+  prevR = getEncoderCount_right();
+  runStart = nowMs();
+  segStart = runStart;
+  digitalWrite(LED_FRONT_LEFT, LOW);
+  digitalWrite(LED_FRONT_RIGHT, LOW);
+  digitalWrite(LED_BACK_LEFT, LOW);
+  digitalWrite(LED_BACK_RIGHT, LOW);
+}
+
+// End of a run: stop, remember the result, then wait for the next box
+void finishRun() {
   drive(0, 0);
-  if (!done) {
-    saveLog();
-    partTime = nowMs() - startTime;
-    done = true;
-  }
-  digitalWrite(LED_FRONT_LEFT, HIGH);
-  digitalWrite(LED_FRONT_RIGHT, HIGH);
-  digitalWrite(LED_BACK_LEFT, HIGH);
-  digitalWrite(LED_BACK_RIGHT, HIGH);
-  if (nowMs() - lastPrint > 5000) {
-    printLog();
-    lastPrint = nowMs();
-  }
+  saveLog();
+  runTime[run] = nowMs() - runStart;
+  runReached[run] = step;
+  step = DONE;
+  waiting = true;
+  waitStart = nowMs();
 }
 
 void setup() {
@@ -311,89 +315,123 @@ void setup() {
   digitalWrite(RIGHT_SLEEP, HIGH);
   Serial.begin(9600);
   delay(3000);   // 3 seconds to put the robot down
-  prevL = getEncoderCount_left();
-  prevR = getEncoderCount_right();
+  startRun();
 }
 
 void loop() {
   readSensors();
   updateEncoders();
   long dist = travel2 / 2;
+  long stepDist = dist - stepStartDist;
+  long stepTurn = turnTotal - stepStartTurn;
 
-  // Stop: end of Part 1, or a bump switch pressed
+  // All runs done: stay stopped, all LEDs on, print the logs every 5 seconds
+  if (allDone) {
+    drive(0, 0);
+    if (nowMs() - lastPrint > 5000) {
+      printLog();
+      lastPrint = nowMs();
+    }
+    return;
+  }
+
+  // Between runs: blink the LEDs for 6 seconds while it is moved to the next box
+  if (waiting) {
+    drive(0, 0);
+    bool on = ((nowMs() - waitStart) / 250) % 2 == 0;
+    digitalWrite(LED_FRONT_LEFT, on ? HIGH : LOW);
+    digitalWrite(LED_FRONT_RIGHT, on ? HIGH : LOW);
+    digitalWrite(LED_BACK_LEFT, on ? LOW : HIGH);
+    digitalWrite(LED_BACK_RIGHT, on ? LOW : HIGH);
+    if (nowMs() - waitStart > WAIT_MS) {
+      waiting = false;
+      if (run + 1 < RUNS) {
+        run++;
+        startRun();
+      } else {
+        allDone = true;
+        digitalWrite(LED_FRONT_LEFT, HIGH);
+        digitalWrite(LED_FRONT_RIGHT, HIGH);
+        digitalWrite(LED_BACK_LEFT, HIGH);
+        digitalWrite(LED_BACK_RIGHT, HIGH);
+      }
+    }
+    return;
+  }
+
+  // A bump switch ends this run (ignored for the first half second of a run)
   bool bumped = false;
   for (int i = 0; i < 6; i++) {
     if (digitalRead(BUMP_PINS[i]) == LOW) bumped = true;
   }
-  if (done || bumped || (synced && dist >= PART_END)) {
-    finish();
+  if (bumped && nowMs() - runStart > 500) {
+    finishRun();
     return;
   }
 
-  if (startTime == 0) {
-    startTime = nowMs();
-    segStart = startTime;
-  }
-
-  // ----- Start: drive straight out of the box until the line is found -----
+  // ----- 1. LAUNCH: straight out of the box until the line is seen -----
   // (a wide black patch, like the start bar, is driven straight over)
-  if (!started) {
-    drive(START_SPEED, START_SPEED);
+  if (step == LAUNCH) {
+    drive(LAUNCH_SPEED, LAUNCH_SPEED);
     if (total > 0 && strongBlack < 5) {
-      started = true;
-      travel2 = 2 * START_BAR_DIST;
+      launchDist[run] = dist;                         // where it met the line...
+      long pos = weighted / total;                    // ...and on which side of the sensors
+      lineSide[run] = (pos > 4500) ? -1 : (pos < 2500) ? 1 : 0;
+      setStep(JOIN);
     }
     return;
   }
 
-  // ----- Line the distance up with the map at T1 (first big right turn) -----
-  if (!synced && turnSinceStart - minTurn >= T1_SYNC_TURN) {
-    synced = true;
-    travel2 = 2 * T1_SYNC_DIST;
-    dist = T1_SYNC_DIST;
-  }
-  // ----- ...and again where the horseshoe starts curving left -----
-  if (synced && !hsSynced && dist > T1_SYNC_DIST + 80 &&
-      chunkTurns[0] + chunkTurns[1] + chunkTurns[2] <= HS_SYNC_TURN) {
-    hsSynced = true;
-    travel2 = 2 * HS_SYNC_DIST;
-    dist = HS_SYNC_DIST;
+  // ----- Move on to the next step when this one is finished -----
+  if (step == TO_T1 && recentTurn() >= CURVE_DETECT) {
+    setStep(T1_ARC);                                  // track started curving right
+  } else if (step == T1_ARC && (stepTurn >= T1_TURN || stepDist >= T1_LENGTH)) {
+    setStep(STRAIGHT);
+  } else if (step == STRAIGHT && (stepDist >= STRAIGHT_LENGTH ||
+                                  (stepDist > 40 && recentTurn() <= -CURVE_DETECT))) {
+    setStep(HS_ARC);                                  // planned distance, or the curve started
+  } else if (step == HS_ARC && (stepTurn <= HS_TURN || stepDist >= HS_LENGTH)) {
+    setStep(EXIT);
+  } else if (step == EXIT && stepDist >= EXIT_LENGTH) {
+    finishRun();
+    return;
   }
 
-  // ----- Speed -----
-  int target = synced ? targetSpeed(dist) : PRE_T1_SPEED;
-  if (!joined) target = JOIN_SPEED;           // ease onto the line first
-  if (speedNow < target) speedNow += 2;       // speed up gently
+  // ----- Speed and planned turn rate for this step -----
+  int target = TO_T1_SPEED;
+  float planCurve = 0;                                // turn counts per count travelled
+  bool planned = false;
+  if (step == JOIN)          { target = JOIN_SPEED; }
+  else if (step == T1_ARC)   { target = T1_SPEED;       planCurve = (float)T1_TURN / T1_LENGTH; planned = true; }
+  else if (step == STRAIGHT) { target = STRAIGHT_SPEED; planned = true; }
+  else if (step == HS_ARC)   { target = HS_SPEED;       planCurve = (float)HS_TURN / HS_LENGTH; planned = true; }
+  else if (step == EXIT)     { target = EXIT_SPEED; }
+  if (speedNow < target) speedNow += 3;       // speed up quickly but not in one jump
   if (speedNow > target) speedNow = target;   // slow down at once
 
   // ----- Line lost -----
   if (total == 0) {
-    if (!everSawLine) {                        // not found the line yet: go straight
-      drive(JOIN_SPEED, JOIN_SPEED);
-      return;
-    }
     if (lostTime == 0) {
       lostTime = nowMs();
       segLost++;
-      int p = synced ? pieceAt(dist) : -1;
-      if (labs(lastError) < 1000 && p >= 0) spinRight = MAP_TURN[p] > 0;  // map says which way
-      else spinRight = lastError > 0;
+      if (step == TO_T1 || step == T1_ARC) spinRight = true;     // T1 turns right
+      else if (step == HS_ARC)            spinRight = false;     // horseshoe turns left
+      else                                spinRight = lastError > 0;
       lastPosition = spinRight ? 0 : 7000;
     }
-    if (nowMs() - lostTime > 1500) {          // could not find it: stop and print
-      finish();
+    if (nowMs() - lostTime > 1500) {          // could not find it: end this run
+      finishRun();
       return;
     }
     if (spinRight) drive(SEARCH_SPEED, -SEARCH_SPEED);
     else           drive(-SEARCH_SPEED, SEARCH_SPEED);
-    speedNow = JOIN_SPEED;                     // continue at joining speed once found
+    speedNow = JOIN_SPEED;
     firstReading = true;
     return;
   }
   lostTime = 0;
-  everSawLine = true;
 
-  // ----- Follow the line -----
+  // ----- Steering -----
   long position = weighted / total;
   lastPosition = position;
   long error = 3500 - position;                // > 0: line is to the RIGHT
@@ -401,19 +439,18 @@ void loop() {
   firstReading = false;
   lastError = error;
 
-  // P (and the extra at the edge) scale with speed: the faster it goes, the bigger
-  // the wheel difference needed for the same correction. D does not: the error
-  // already changes faster at higher speed, so D grows by itself.
+  // Line correction: P scales with speed (bigger wheel difference needed when fast);
+  // D does not (the error already changes faster at higher speed).
   float correction = KP * error;
-  if (hsSynced && labs(error) < 1500) correction *= CURVE_KP_FACTOR;  // planned path does the turning
+  if (planned && labs(error) < 1500) correction *= PLAN_KP;   // the plan does the turning
   if (error > SHARP_ERROR)  correction += KP_SHARP * (error - SHARP_ERROR);
   if (error < -SHARP_ERROR) correction += KP_SHARP * (error + SHARP_ERROR);
-  if (speedNow > 50) correction = correction * speedNow / 50;   // faster -> steer more
+  if (speedNow > 50) correction = correction * speedNow / 50;
   correction += KD * change;
 
-  // Steer into the curve the map says is here (a little ahead)
-  // (only once lined up at the horseshoe entry, so it never turns early)
-  if (hsSynced) correction += FF_GAIN * speedNow * mapCurve(dist + 30) / 2;
+  // The plan: constant turn rate. For c turn counts per count travelled the wheels
+  // run at speed x (1 +- c/2).
+  correction += speedNow * planCurve / 2;
 
   // Wheel speeds. If the outer wheel would go past full power (255), move BOTH
   // wheels down so the difference (the turn) is kept exactly.
@@ -425,11 +462,11 @@ void loop() {
   right = constrain(right, -MAX_REVERSE, 255);
   drive(left, right);
 
-  // Joined: line centered for a moment after finding it
-  if (!joined) {
+  // JOIN ends once the line has been centered for a moment
+  if (step == JOIN) {
     if (labs(error) < 800) centeredReads++;
     else centeredReads = 0;
-    if (centeredReads >= 10) joined = true;
+    if (centeredReads >= 10) setStep(TO_T1);
   }
 
   // for the log
