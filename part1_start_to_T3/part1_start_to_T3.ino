@@ -28,21 +28,23 @@ const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 // PRE_T1_SPEED. The robot brakes early enough to reach each section at its speed.
 const int  NUM_ZONES = 3;
 const long ZONE_END[NUM_ZONES]   = {  330,  450, 1150 };
-const int  ZONE_SPEED[NUM_ZONES] = {   60,  120,  105 };
+const int  ZONE_SPEED[NUM_ZONES] = {   70,  160,  150 };
 //                                  rest of T1  T1->T2  T2 horseshoe
-const int  START_SPEED = 50;     // driving straight from the box to the line
-const int  PRE_T1_SPEED = 55;    // following the line before T1 (distance not lined up yet)
-const int  JOIN_SPEED = 45;      // just after finding the line, until it is centered
+const int  START_SPEED = 100;    // jump start: straight out of the box to the line
+const int  PRE_T1_SPEED = 70;    // following the line before T1 (distance not lined up yet)
+const int  JOIN_SPEED = 70;      // just after finding the line, until it is centered
 const int  BRAKE_COUNTS = 3;     // counts needed to lose 1 unit of speed
 
 const float KP = 0.014;          // steering (tuned at speed 50, scaled up with speed)
 const float KD = 0.07;           // damping
-const float FF_GAIN = 0.8;       // steer into the curves from the map (0 = off).
+const float FF_GAIN = 1.0;       // drive the planned curve from the map (0 = off, 1 = full).
                                  // Runs wide on T2 -> raise. Cuts inside -> lower.
 const int   SHARP_ERROR = 2000;  // line near the edge: steer harder
-const float KP_SHARP    = 0.08;  // run 1: lost the line at T1 with 0.05
-const int   MAX_REVERSE = 50;
-const int   SEARCH_SPEED = 45;   // spin speed if the line is lost
+const float KP_SHARP    = 0.12;  // hard steering at the edge (T1 is a sharp corner)
+const int   MAX_REVERSE = 80;    // inner wheel may go this fast backwards
+const int   SEARCH_SPEED = 80;   // spin speed if the line is lost
+const float CURVE_KP_FACTOR = 0.6; // in the horseshoe: line following only nudges
+                                   // (full strength again if the line is far off)
 // ===================================================
 
 // Shape of Part 1 from the map runs (average of 3): turn per piece of ~150 counts.
@@ -109,6 +111,11 @@ int  segLost = 0;
 unsigned long segStart = 0;
 unsigned long lastPrint = 0;
 
+// Time in milliseconds from the microsecond timer (millis() only moves in big steps)
+unsigned long nowMs() {
+  return micros() / 1000;
+}
+
 void setWheel(int dirPin, int pwmPin, int speed) {
   if (speed >= 0) { digitalWrite(dirPin, LOW);  analogWrite(pwmPin, speed); }
   else            { digitalWrite(dirPin, HIGH); analogWrite(pwmPin, -speed); }
@@ -125,7 +132,7 @@ void saveLog() {
   if (logCount < LOG_MAX && segReads > 0) {
     logDist[logCount] = travel2 / 2;
     logTurn[logCount] = segTurn;
-    logMs[logCount] = millis() - segStart;
+    logMs[logCount] = nowMs() - segStart;
     logMaxErr[logCount] = segMaxErr;
     logSpeed[logCount] = segSpeedSum / segReads;
     logLost[logCount] = segLost;
@@ -134,7 +141,7 @@ void saveLog() {
   }
   segTravel2 = 0; segTurn = 0; segMaxErr = 0; segSpeedSum = 0; segReads = 0; segLost = 0;
   segErrSum = 0;
-  segStart = millis();
+  segStart = nowMs();
 }
 
 // Encoders: distance travelled and turning (direction comes from the motor command)
@@ -246,6 +253,8 @@ void printLog() {
   Serial.print("synced_at_T1 ");  Serial.println(synced ? 1 : 0);
   Serial.print("synced_at_horseshoe "); Serial.println(hsSynced ? 1 : 0);
   Serial.print("ff_gain ");       Serial.println(FF_GAIN);
+  Serial.print("curve_kp ");      Serial.println(CURVE_KP_FACTOR);
+  Serial.print("start_speed ");  Serial.println(START_SPEED);
   Serial.print("pre_t1_speed "); Serial.println(PRE_T1_SPEED);
   Serial.print("kp_sharp ");     Serial.println(KP_SHARP);
   Serial.print("zone_speeds ");
@@ -271,16 +280,16 @@ void finish() {
   drive(0, 0);
   if (!done) {
     saveLog();
-    partTime = millis() - startTime;
+    partTime = nowMs() - startTime;
     done = true;
   }
   digitalWrite(LED_FRONT_LEFT, HIGH);
   digitalWrite(LED_FRONT_RIGHT, HIGH);
   digitalWrite(LED_BACK_LEFT, HIGH);
   digitalWrite(LED_BACK_RIGHT, HIGH);
-  if (millis() - lastPrint > 5000) {
+  if (nowMs() - lastPrint > 5000) {
     printLog();
-    lastPrint = millis();
+    lastPrint = nowMs();
   }
 }
 
@@ -322,7 +331,7 @@ void loop() {
   }
 
   if (startTime == 0) {
-    startTime = millis();
+    startTime = nowMs();
     segStart = startTime;
   }
 
@@ -360,24 +369,24 @@ void loop() {
   // ----- Line lost -----
   if (total == 0) {
     if (!everSawLine) {                        // not found the line yet: go straight
-      drive(START_SPEED, START_SPEED);
+      drive(JOIN_SPEED, JOIN_SPEED);
       return;
     }
     if (lostTime == 0) {
-      lostTime = millis();
+      lostTime = nowMs();
       segLost++;
       int p = synced ? pieceAt(dist) : -1;
       if (labs(lastError) < 1000 && p >= 0) spinRight = MAP_TURN[p] > 0;  // map says which way
       else spinRight = lastError > 0;
       lastPosition = spinRight ? 0 : 7000;
     }
-    if (millis() - lostTime > 1500) {          // could not find it: stop and print
+    if (nowMs() - lostTime > 1500) {          // could not find it: stop and print
       finish();
       return;
     }
     if (spinRight) drive(SEARCH_SPEED, -SEARCH_SPEED);
     else           drive(-SEARCH_SPEED, SEARCH_SPEED);
-    speedNow = START_SPEED;
+    speedNow = JOIN_SPEED;                     // continue at joining speed once found
     firstReading = true;
     return;
   }
@@ -392,27 +401,35 @@ void loop() {
   firstReading = false;
   lastError = error;
 
-  float correction = KP * error + KD * change;
+  // P (and the extra at the edge) scale with speed: the faster it goes, the bigger
+  // the wheel difference needed for the same correction. D does not: the error
+  // already changes faster at higher speed, so D grows by itself.
+  float correction = KP * error;
+  if (hsSynced && labs(error) < 1500) correction *= CURVE_KP_FACTOR;  // planned path does the turning
   if (error > SHARP_ERROR)  correction += KP_SHARP * (error - SHARP_ERROR);
   if (error < -SHARP_ERROR) correction += KP_SHARP * (error + SHARP_ERROR);
   if (speedNow > 50) correction = correction * speedNow / 50;   // faster -> steer more
+  correction += KD * change;
 
   // Steer into the curve the map says is here (a little ahead)
   // (only once lined up at the horseshoe entry, so it never turns early)
   if (hsSynced) correction += FF_GAIN * speedNow * mapCurve(dist + 30) / 2;
 
-  int maxSpeed = speedNow * 2;
-  if (maxSpeed < 100) maxSpeed = 100;
-  if (maxSpeed > 255) maxSpeed = 255;
-  int left  = constrain((int)(speedNow + correction), -MAX_REVERSE, maxSpeed);
-  int right = constrain((int)(speedNow - correction), -MAX_REVERSE, maxSpeed);
+  // Wheel speeds. If the outer wheel would go past full power (255), move BOTH
+  // wheels down so the difference (the turn) is kept exactly.
+  int left  = (int)(speedNow + correction);
+  int right = (int)(speedNow - correction);
+  if (left > 255)  { right -= left - 255;  left = 255; }
+  if (right > 255) { left  -= right - 255; right = 255; }
+  left  = constrain(left,  -MAX_REVERSE, 255);
+  right = constrain(right, -MAX_REVERSE, 255);
   drive(left, right);
 
   // Joined: line centered for a moment after finding it
   if (!joined) {
     if (labs(error) < 800) centeredReads++;
     else centeredReads = 0;
-    if (centeredReads >= 20) joined = true;
+    if (centeredReads >= 10) joined = true;
   }
 
   // for the log
