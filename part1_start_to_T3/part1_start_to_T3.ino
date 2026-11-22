@@ -1,4 +1,6 @@
-// PART 1 ONLY: start box -> start bar -> T1 -> T2 horseshoe -> stops before T3.
+// PART 1 ONLY: start box -> T1 -> T2 horseshoe -> stops before T3.
+// Works from any of the 4 start boxes: it drives straight until it finds the line,
+// follows it at a safe speed, and lines its distance up with the map at T1.
 // When it stops (all four LEDs on), plug in USB, open the Serial Monitor (9600)
 // and copy the PART 1 block. Press a front bump switch to stop it any time.
 #include <ECE3.h>
@@ -22,13 +24,14 @@ const int LED_BACK_RIGHT  = 58;
 const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 
 // ================= Numbers to tune =================
-// Speed for each section of Part 1 (encoder distance from the start box).
-// The robot brakes early enough to reach each section at its speed.
-const int  NUM_ZONES = 4;
-const long ZONE_END[NUM_ZONES]   = {  200,  330,  450, 1150 };
-const int  ZONE_SPEED[NUM_ZONES] = {   90,   60,   80,   65 };
-//                                  start   T1   T1->T2  T2 horseshoe
-const int  START_SPEED = 50;     // over the start bar
+// Speed for each section of Part 1 after T1 (map distance). Before T1 it drives at
+// PRE_T1_SPEED. The robot brakes early enough to reach each section at its speed.
+const int  NUM_ZONES = 3;
+const long ZONE_END[NUM_ZONES]   = {  330,  450, 1150 };
+const int  ZONE_SPEED[NUM_ZONES] = {   60,   80,   65 };
+//                                  rest of T1  T1->T2  T2 horseshoe
+const int  START_SPEED = 50;     // driving straight from the box to the line
+const int  PRE_T1_SPEED = 60;    // following the line before T1 (distance not lined up yet)
 const int  BRAKE_COUNTS = 3;     // counts needed to lose 1 unit of speed
 
 const float KP = 0.014;          // steering (tuned at speed 50, scaled up with speed)
@@ -51,7 +54,11 @@ const int  MAP_TURN[MAP_N] = {  322,   28, -120, -214, -135, -249,  -73 };
 // corner (the map can't say exactly where in its piece it starts), so normal
 // line following handles T1.
 const bool MAP_ROUND[MAP_N] = { false, false, true, true, true, true, true };
-const long START_BAR_DIST = 147; // distance at the start bar in the map runs
+const long START_BAR_DIST = 147; // where the map starts
+// T1 is the landmark: once the robot has turned right this much (about 60 degrees)
+// after finding the line, it is part-way round T1, at this map distance.
+const long T1_SYNC_TURN = 200;
+const long T1_SYNC_DIST = 250;
 const long PART_END = 1150;      // stop here (short straight heading into T3)
 
 // ---------- state ----------
@@ -62,8 +69,9 @@ long lastPosition = 3500;
 long lastError = 0;
 bool firstReading = true;
 int  speedNow = START_SPEED;
-bool started = false;            // crossed the start bar
-bool sawStartBar = false;
+bool started = false;            // found the line after leaving the box
+bool synced = false;             // distance lined up with the map at T1
+long turnSinceStart = 0;         // turning since the line was found (+ = right)
 bool everSawLine = false;
 bool done = false;
 unsigned long lostTime = 0;
@@ -123,6 +131,7 @@ void updateEncoders() {
   if (rightCmd < 0) dr = -dr;
   travel2 += dl + dr;
   if (started) {
+    turnSinceStart += dl - dr;
     segTravel2 += dl + dr;
     segTurn += dl - dr;
     if (segTravel2 >= 300) saveLog();
@@ -186,6 +195,7 @@ void printLog() {
   Serial.println("===== PART 1 START (copy from here) =====");
   Serial.print("part_time_ms ");  Serial.println(partTime);
   Serial.print("end_dist ");      Serial.println(travel2 / 2);
+  Serial.print("synced_at_T1 ");  Serial.println(synced ? 1 : 0);
   Serial.print("ff_gain ");       Serial.println(FF_GAIN);
   Serial.print("zone_speeds ");
   for (int z = 0; z < NUM_ZONES; z++) { Serial.print(ZONE_SPEED[z]); Serial.print(' '); }
@@ -251,26 +261,35 @@ void loop() {
   for (int i = 0; i < 6; i++) {
     if (digitalRead(BUMP_PINS[i]) == LOW) bumped = true;
   }
-  if (done || bumped || (started && dist >= PART_END)) {
+  if (done || bumped || (synced && dist >= PART_END)) {
     finish();
     return;
   }
 
-  // ----- Start: straight over the start bar, then line the distance up with the map -----
+  if (startTime == 0) {
+    startTime = millis();
+    segStart = startTime;
+  }
+
+  // ----- Start: drive straight out of the box until the line is found -----
+  // (a wide black patch, like the start bar, is driven straight over)
   if (!started) {
     drive(START_SPEED, START_SPEED);
-    if (blackSensors >= 4) sawStartBar = true;
-    if ((sawStartBar && blackSensors <= 3) || millis() > 6000) {
+    if (total > 0 && strongBlack < 5) {
       started = true;
       travel2 = 2 * START_BAR_DIST;
-      startTime = millis();
-      segStart = startTime;
     }
     return;
   }
 
+  // ----- Line the distance up with the map at T1 (first big right turn) -----
+  if (!synced && turnSinceStart >= T1_SYNC_TURN) {
+    synced = true;
+    travel2 = 2 * T1_SYNC_DIST;
+  }
+
   // ----- Speed -----
-  int target = targetSpeed(dist);
+  int target = synced ? targetSpeed(dist) : PRE_T1_SPEED;
   if (speedNow < target) speedNow += 2;       // speed up gently
   if (speedNow > target) speedNow = target;   // slow down at once
 
@@ -283,7 +302,7 @@ void loop() {
     if (lostTime == 0) {
       lostTime = millis();
       segLost++;
-      int p = pieceAt(dist);
+      int p = synced ? pieceAt(dist) : -1;
       if (labs(lastError) < 1000 && p >= 0) spinRight = MAP_TURN[p] > 0;  // map says which way
       else spinRight = lastError > 0;
       lastPosition = spinRight ? 0 : 7000;
@@ -315,7 +334,7 @@ void loop() {
   if (speedNow > 50) correction = correction * speedNow / 50;   // faster -> steer more
 
   // Steer into the curve the map says is here (a little ahead)
-  int p = pieceAt(dist + 30);
+  int p = synced ? pieceAt(dist + 30) : -1;
   if (p >= 0 && MAP_ROUND[p]) {
     long len = MAP_END[p] - ((p == 0) ? START_BAR_DIST : MAP_END[p - 1]);
     correction += FF_GAIN * speedNow * ((float)MAP_TURN[p] / len) / 2;
