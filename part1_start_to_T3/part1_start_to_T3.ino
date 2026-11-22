@@ -28,7 +28,7 @@ const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 // PRE_T1_SPEED. The robot brakes early enough to reach each section at its speed.
 const int  NUM_ZONES = 3;
 const long ZONE_END[NUM_ZONES]   = {  330,  450, 1150 };
-const int  ZONE_SPEED[NUM_ZONES] = {   60,  110,  100 };
+const int  ZONE_SPEED[NUM_ZONES] = {   60,  120,  105 };
 //                                  rest of T1  T1->T2  T2 horseshoe
 const int  START_SPEED = 50;     // driving straight from the box to the line
 const int  PRE_T1_SPEED = 55;    // following the line before T1 (distance not lined up yet)
@@ -101,8 +101,10 @@ long travel2 = 0;                // distance x2 (left + right counts)
 const int LOG_MAX = 30;
 long logDist[LOG_MAX];
 int  logTurn[LOG_MAX], logMs[LOG_MAX], logMaxErr[LOG_MAX], logSpeed[LOG_MAX], logLost[LOG_MAX];
+int  logAvgErr[LOG_MAX];
 int  logCount = 0;
 long segTravel2 = 0, segTurn = 0, segMaxErr = 0, segSpeedSum = 0, segReads = 0;
+long segErrSum = 0;
 int  segLost = 0;
 unsigned long segStart = 0;
 unsigned long lastPrint = 0;
@@ -127,9 +129,11 @@ void saveLog() {
     logMaxErr[logCount] = segMaxErr;
     logSpeed[logCount] = segSpeedSum / segReads;
     logLost[logCount] = segLost;
+    logAvgErr[logCount] = segErrSum / segReads;
     logCount++;
   }
   segTravel2 = 0; segTurn = 0; segMaxErr = 0; segSpeedSum = 0; segReads = 0; segLost = 0;
+  segErrSum = 0;
   segStart = millis();
 }
 
@@ -247,14 +251,18 @@ void printLog() {
   Serial.print("zone_speeds ");
   for (int z = 0; z < NUM_ZONES; z++) { Serial.print(ZONE_SPEED[z]); Serial.print(' '); }
   Serial.println();
-  Serial.println("dist,turn,lost,ms,maxerr,speed");
+  // avgerr: average line position. In a LEFT curve (the horseshoe):
+  //   negative = line on the robot's left  = robot running WIDE (outside)
+  //   positive = line on the robot's right = robot CUTTING INSIDE
+  Serial.println("dist,turn,lost,ms,maxerr,speed,avgerr");
   for (int i = 0; i < logCount; i++) {
     Serial.print(logDist[i]);   Serial.print(',');
     Serial.print(logTurn[i]);   Serial.print(',');
     Serial.print(logLost[i]);   Serial.print(',');
     Serial.print(logMs[i]);     Serial.print(',');
     Serial.print(logMaxErr[i]); Serial.print(',');
-    Serial.println(logSpeed[i]);
+    Serial.print(logSpeed[i]);  Serial.print(',');
+    Serial.println(logAvgErr[i]);
   }
   Serial.println("===== PART 1 END (copy to here) =====");
 }
@@ -410,5 +418,6 @@ void loop() {
   // for the log
   if (labs(error) > segMaxErr) segMaxErr = labs(error);
   segSpeedSum += speedNow;
+  segErrSum += error;
   segReads++;
 }
