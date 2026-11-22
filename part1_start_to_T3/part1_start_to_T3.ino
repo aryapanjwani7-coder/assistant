@@ -28,10 +28,10 @@ const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 // PRE_T1_SPEED. The robot brakes early enough to reach each section at its speed.
 const int  NUM_ZONES = 3;
 const long ZONE_END[NUM_ZONES]   = {  330,  450, 1150 };
-const int  ZONE_SPEED[NUM_ZONES] = {   60,   80,   65 };
+const int  ZONE_SPEED[NUM_ZONES] = {   60,   90,   85 };
 //                                  rest of T1  T1->T2  T2 horseshoe
 const int  START_SPEED = 50;     // driving straight from the box to the line
-const int  PRE_T1_SPEED = 60;    // following the line before T1 (distance not lined up yet)
+const int  PRE_T1_SPEED = 55;    // following the line before T1 (distance not lined up yet)
 const int  BRAKE_COUNTS = 3;     // counts needed to lose 1 unit of speed
 
 const float KP = 0.014;          // steering (tuned at speed 50, scaled up with speed)
@@ -39,7 +39,7 @@ const float KD = 0.07;           // damping
 const float FF_GAIN = 0.6;       // steer into the curves from the map (0 = off).
                                  // Runs wide on T2 -> raise. Cuts inside -> lower.
 const int   SHARP_ERROR = 2000;  // line near the edge: steer harder
-const float KP_SHARP    = 0.05;
+const float KP_SHARP    = 0.08;  // run 1: lost the line at T1 with 0.05
 const int   MAX_REVERSE = 50;
 const int   SEARCH_SPEED = 45;   // spin speed if the line is lost
 // ===================================================
@@ -197,6 +197,8 @@ void printLog() {
   Serial.print("end_dist ");      Serial.println(travel2 / 2);
   Serial.print("synced_at_T1 ");  Serial.println(synced ? 1 : 0);
   Serial.print("ff_gain ");       Serial.println(FF_GAIN);
+  Serial.print("pre_t1_speed "); Serial.println(PRE_T1_SPEED);
+  Serial.print("kp_sharp ");     Serial.println(KP_SHARP);
   Serial.print("zone_speeds ");
   for (int z = 0; z < NUM_ZONES; z++) { Serial.print(ZONE_SPEED[z]); Serial.print(' '); }
   Serial.println();
