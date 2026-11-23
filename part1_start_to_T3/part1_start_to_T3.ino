@@ -53,8 +53,10 @@ const int  STRAIGHT_SPEED  = 160; // 3. straight: speed
 const long STRAIGHT_LENGTH = 160; //    distance (ends early if the horseshoe starts)
 
 const int  HS_SPEED  = 150;      // 4. horseshoe arc: speed
-const long HS_TURN   = -770;     //    total turn (about 230 degrees left)
-const long HS_LENGTH = 720;      //    over this distance
+const long HS_TURN   = -820;     //    total turn (about 250 degrees left)
+const long HS_LENGTH = 580;      //    over this distance
+                                 //    (4-box session: the robot needed -800..-850 over
+                                 //    520..620 counts; -770 over 720 was too gentle)
 
 const int  RUNS = 4;             // runs in a row (one per start box)
 const unsigned long WAIT_MS = 6000;  // time to move it to the next box
@@ -445,11 +447,13 @@ void loop() {
 
   // Line correction: P scales with speed (bigger wheel difference needed when fast);
   // D does not (the error already changes faster at higher speed).
+  // The extra steering at the edge is NOT scaled with speed: it is already strong,
+  // and tripling it at speed 150 made the robot swerve from side to side.
   float correction = KP * error;
   if (planned && labs(error) < 1500) correction *= PLAN_KP;   // the plan does the turning
+  if (speedNow > 50) correction = correction * speedNow / 50;
   if (error > SHARP_ERROR)  correction += KP_SHARP * (error - SHARP_ERROR);
   if (error < -SHARP_ERROR) correction += KP_SHARP * (error + SHARP_ERROR);
-  if (speedNow > 50) correction = correction * speedNow / 50;
   correction += KD * change;
 
   // The plan: constant turn rate. For c turn counts per count travelled the wheels
