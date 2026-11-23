@@ -57,16 +57,17 @@ const long T1_MAX_DIST = 500;    //    or, at the latest, after this distance in
                                  //    (T1 turns differ by box: 275..370 in tests)
 
 const int  STRAIGHT_SPEED  = 160; // 3. straight: speed
-const long STRAIGHT_LENGTH = 160; //    distance (ends early if the horseshoe starts)
+const long STRAIGHT_LENGTH = 160; //    always this distance (straightening up after T1
+                                  //    can look like the horseshoe starting, so no early end)
 
 const int  HS_SPEED  = 150;      // 4. horseshoe arc: speed
-// The horseshoe is not a perfect circle: it is gentler in the middle. Planned in
-// 4 pieces, from the 4-box sessions (turn of each piece, length of each piece).
+// The horseshoe is sharp -> nearly straight -> sharp. Planned in 4 pieces, from
+// what the robot measured in boxes 1 and 4 (-299/-292, -66/-63, -380/-381, ...).
 const int  HS_PIECES = 4;
-const long HS_PIECE_TURN[HS_PIECES] = { -225, -150, -225, -220 };
-const long HS_PIECE_LEN[HS_PIECES]  = {  150,  150,  150,  130 };
+const long HS_PIECE_TURN[HS_PIECES] = { -295,  -65, -375,  -85 };
+const long HS_PIECE_LEN[HS_PIECES]  = {  150,  150,  150,  100 };
 const long HS_TURN   = -820;     //    total turn (about 250 degrees left)
-const long HS_LENGTH = 580;      //    total length
+const long HS_LENGTH = 550;      //    total length
 
 const int  RUNS = 4;             // runs in a row (one per start box)
 const unsigned long WAIT_MS = 6000;  // time to move it to the next box
@@ -77,8 +78,9 @@ const long EXIT_LENGTH = 30;
 // 5. Hairpins T3, T4, T5. Distances are counted from the end of the horseshoe
 //    (from the map runs). They only decide which way to spin if the line is lost.
 const int  HAIRPIN_SPEED = 65;   //    careful speed through T3-T5
-const long T3_END = 450;         //    T3 (turns right) until here
-const long T4_END = 800;         //    T4 (turns left) until here, then T5 (turns right)
+const long T3_END = 480;         //    T3 (turns right) until here
+const long T4_END = 950;         //    T4 (turns left) until here, then T5 (turns right)
+                                 //    (from the Part 1+2 session logs)
 const long PART2_LENGTH = 1250;  //    stop here: start of the long straight to T6
 
 // Detecting where a curve starts: turned this much within the last 60 counts
@@ -417,9 +419,8 @@ void loop() {
   if (step == T1 && ((t1Turned >= T1_DONE && recentTurn() < T1_STEADY)
                      || t1Turned >= T1_MAX || stepDist >= T1_MAX_DIST)) {
     setStep(STRAIGHT);                                // T1 done: go
-  } else if (step == STRAIGHT && (stepDist >= STRAIGHT_LENGTH ||
-                                  (stepDist > 40 && recentTurn() <= -CURVE_DETECT))) {
-    setStep(HS_ARC);                                  // planned distance, or the curve started
+  } else if (step == STRAIGHT && stepDist >= STRAIGHT_LENGTH) {
+    setStep(HS_ARC);                                  // planned distance done
   } else if (step == HS_ARC && (stepTurn <= HS_TURN || stepDist >= HS_LENGTH)) {
     setStep(EXIT);
   } else if (step == EXIT && stepDist >= EXIT_LENGTH) {
