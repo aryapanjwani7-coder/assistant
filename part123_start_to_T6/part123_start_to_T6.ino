@@ -62,13 +62,14 @@ const long STRAIGHT_LENGTH = 160; //    always this distance (straightening up a
                                   //    can look like the horseshoe starting, so no early end)
 
 const int  HS_SPEED  = 150;      // 4. horseshoe arc: speed
-// The horseshoe is sharp -> nearly straight -> sharp. Planned in 4 pieces, from
-// what the robot measured in boxes 1 and 4 (-299/-292, -66/-63, -380/-381, ...).
+// The horseshoe is sharper at the start and end than in the middle. Planned in 4
+// pieces: halfway between what the robot measured (-295, -65, -375, -85) and one
+// smooth arc (-212 each). Using the measured numbers alone made it pivot and U-turn.
 const int  HS_PIECES = 4;
-const long HS_PIECE_TURN[HS_PIECES] = { -295,  -65, -375,  -85 };
-const long HS_PIECE_LEN[HS_PIECES]  = {  150,  150,  150,  100 };
+const long HS_PIECE_TURN[HS_PIECES] = { -254, -139, -294, -135 };
+const long HS_PIECE_LEN[HS_PIECES]  = {  150,  150,  150,  130 };
 const long HS_TURN   = -820;     //    total turn (about 250 degrees left)
-const long HS_LENGTH = 550;      //    total length
+const long HS_LENGTH = 580;      //    total length
 
 const int  RUNS = 4;             // runs in a row (one per start box)
 const unsigned long WAIT_MS = 6000;  // time to move it to the next box
@@ -461,6 +462,7 @@ void loop() {
     int k = 0;
     while (k < HS_PIECES - 1 && into >= HS_PIECE_LEN[k]) { into -= HS_PIECE_LEN[k]; k++; }
     planCurve = (float)HS_PIECE_TURN[k] / HS_PIECE_LEN[k];
+    if (planCurve < -1.8) planCurve = -1.8;           // never so sharp that a wheel reverses
   }
   else if (step == EXIT)     { target = EXIT_SPEED; }
   else if (step == HAIRPINS) { target = HAIRPIN_SPEED; }
@@ -474,7 +476,8 @@ void loop() {
     if (lostTime == 0) {
       lostTime = nowMs();
       segLost++;
-      if (step == HS_ARC) spinRight = false;                     // horseshoe turns left
+      // (in the horseshoe too: if it over-turned left, the line is on the right)
+      if (false) {}
       else if (step == HAIRPINS && labs(lastError) < 1500) {
         // lost while roughly centered: the hairpin we are in decides the way
         spinRight = !(stepDist >= T3_END && stepDist < T4_END);  // T4 turns left
@@ -534,6 +537,12 @@ void loop() {
   if (right > 255) { left  -= right - 255; right = 255; }
   left  = constrain(left,  -MAX_REVERSE, 255);
   right = constrain(right, -MAX_REVERSE, 255);
+  // In the horseshoe no wheel goes backwards (that pivots it round too far),
+  // unless the line is far off and it really needs to
+  if (step == HS_ARC && labs(error) < 2500) {
+    if (left < 0)  left = 0;
+    if (right < 0) right = 0;
+  }
   drive(left, right);
 
   // for the log
