@@ -1,14 +1,13 @@
 // PART 1 ONLY: start box -> T1 -> T2 horseshoe -> stops on the way to T3.
 //
-// Part 1 is driven as a PLAN, not by reacting to the line:
-//   1. LAUNCH    straight out of the box (any of the 4 boxes) until it sees the line
-//   2. JOIN      ease onto the line until it is centered
-//   3. TO T1     follow the line until the track starts curving right (T1)
-//   4. T1 ARC    one smooth right arc at constant speed
-//   5. STRAIGHT  fixed distance at full speed, holding straight
-//   6. HORSESHOE one smooth left arc at constant speed
-//   7. EXIT      normal line following, then stop
-// In the planned steps (4, 5, 6) the line sensors only make slight corrections.
+// Part 1 is driven as a PLAN:
+//   1. LAUNCH    straight out of the box (any of the 4 boxes) until it meets the line
+//                (ignores the first few cm, where it can see the box outline)
+//   2. T1        follow the line round T1 (from every box this works the same)
+//   3. STRAIGHT  once T1 is done: fixed distance at full speed, holding straight
+//   4. HORSESHOE one smooth left arc at constant speed
+//   5. EXIT      normal line following, then stop
+// In the planned steps (3, 4) the line sensors only make slight corrections.
 //
 // FOUR RUNS IN A ROW, one from each start box:
 //   Put it in box 1 and press RESET. It runs Part 1 and stops.
@@ -40,25 +39,27 @@ const int BUMP_PINS[6] = { 24, 25, 6, 27, 8, 28 };
 // ================= The plan (numbers to tune) =================
 // Turn amounts are in encoder turn counts (+ = right, - = left, about 3.3 = 1 degree).
 // Lengths are encoder counts of travel.
-const int  LAUNCH_SPEED = 100;   // 1. straight out of the box
-const int  JOIN_SPEED   = 70;    // 2. easing onto the line
-const int  TO_T1_SPEED  = 70;    // 3. following the line up to T1
+const int  LAUNCH_SPEED  = 100;  // 1. straight out of the box
+const long LAUNCH_IGNORE = 40;   //    ignore black for this distance (box outline)
 
-const int  T1_SPEED  = 80;       // 4. T1 arc: speed
-const long T1_TURN   = 280;      //    turn after T1 is detected (T1 is ~100 degrees)
-const long T1_LENGTH = 140;      //    over this distance
+const int  T1_SPEED   = 70;      // 2. following the line round T1
+const long T1_DONE    = 250;     //    T1 is done once it has turned right this much
+                                 //    (counted from its most-left point, so a box that
+                                 //    joins the line with a left turn works too)...
+const long T1_STEADY  = 15;      //    ...and is no longer turning much (last 60 counts)
+const long T1_MAX     = 340;     //    or, at the latest, once it has turned this much
 
-const int  STRAIGHT_SPEED  = 160; // 5. straight: speed
-const long STRAIGHT_LENGTH = 140; //    distance (ends early if the horseshoe starts)
+const int  STRAIGHT_SPEED  = 160; // 3. straight: speed
+const long STRAIGHT_LENGTH = 160; //    distance (ends early if the horseshoe starts)
 
-const int  HS_SPEED  = 150;      // 6. horseshoe arc: speed
+const int  HS_SPEED  = 150;      // 4. horseshoe arc: speed
 const long HS_TURN   = -770;     //    total turn (about 230 degrees left)
 const long HS_LENGTH = 720;      //    over this distance
 
 const int  RUNS = 4;             // runs in a row (one per start box)
 const unsigned long WAIT_MS = 6000;  // time to move it to the next box
 
-const int  EXIT_SPEED  = 100;    // 7. after the horseshoe
+const int  EXIT_SPEED  = 100;    // 5. after the horseshoe
 const long EXIT_LENGTH = 60;     //    then stop
 
 // Detecting where a curve starts: turned this much within the last 60 counts
@@ -76,8 +77,8 @@ const int   SEARCH_SPEED = 80;   // spin speed if the line is lost
 // ==============================================================
 
 // Steps
-const int LAUNCH = 0, JOIN = 1, TO_T1 = 2, T1_ARC = 3, STRAIGHT = 4, HS_ARC = 5, EXIT = 6, DONE = 7;
-const char* STEP_NAMES[] = { "launch", "join", "toT1", "T1arc", "straight", "horseshoe", "exit", "done" };
+const int LAUNCH = 0, T1 = 1, STRAIGHT = 2, HS_ARC = 3, EXIT = 4, DONE = 5;
+const char* STEP_NAMES[] = { "launch", "T1", "straight", "horseshoe", "exit", "done" };
 int  run = 0;                    // which run (0..3 = box 1..4)
 bool waiting = false;            // between runs: waiting to be moved to the next box
 bool allDone = false;            // all runs finished
@@ -95,7 +96,6 @@ long lastPosition = 3500;
 long lastError = 0;
 bool firstReading = true;
 int  speedNow = LAUNCH_SPEED;
-int  centeredReads = 0;
 unsigned long lostTime = 0;
 bool spinRight = false;
 
@@ -117,7 +117,8 @@ unsigned long runTime[RUNS];
 int  runReached[RUNS];
 long launchDist[RUNS];           // how far it drove before seeing the line
 int  lineSide[RUNS];             // where the line first appeared: -1 left, 1 right, 0 middle
-long joinTurn[RUNS];             // how much it turned to get onto the line
+long t1Turn[RUNS];               // turn when T1 was judged done
+long minTurn = 0;                // most-left turn so far (for judging T1)
 long segTravel2 = 0, segTurn = 0, segMaxErr = 0, segSpeedSum = 0, segReads = 0, segErrSum = 0;
 int  segLost = 0;
 unsigned long segStart = 0;
@@ -160,10 +161,14 @@ void saveLog() {
 
 void setStep(int s) {
   saveLog();                     // one log line per step, so each step can be judged
-  if (step == JOIN) joinTurn[run] = turnTotal;
+  if (step == T1) t1Turn[run] = turnTotal - minTurn;
   step = s;
   stepStartDist = travel2 / 2;
   stepStartTurn = turnTotal;
+  // forget the turning of the previous step, so the next step starts clean
+  chunkTravel2 = 0;
+  chunkTurn = 0;
+  chunkTurns[0] = chunkTurns[1] = chunkTurns[2] = 0;
 }
 
 // Encoders: distance travelled and turning (direction comes from the motor command)
@@ -227,8 +232,9 @@ void readSensors() {
 void printLog() {
   Serial.println();
   Serial.println("===== PART 1 START (copy from here) =====");
-  Serial.print("t1 ");    Serial.print(T1_SPEED);  Serial.print(' '); Serial.print(T1_TURN);
-  Serial.print(' ');      Serial.println(T1_LENGTH);
+  Serial.print("launch "); Serial.print(LAUNCH_SPEED); Serial.print(' '); Serial.println(LAUNCH_IGNORE);
+  Serial.print("t1 ");    Serial.print(T1_SPEED);  Serial.print(' '); Serial.print(T1_DONE);
+  Serial.print(' ');      Serial.println(T1_MAX);
   Serial.print("straight "); Serial.print(STRAIGHT_SPEED); Serial.print(' '); Serial.println(STRAIGHT_LENGTH);
   Serial.print("horseshoe "); Serial.print(HS_SPEED); Serial.print(' '); Serial.print(HS_TURN);
   Serial.print(' ');      Serial.println(HS_LENGTH);
@@ -239,7 +245,7 @@ void printLog() {
     Serial.print(", reached "); Serial.print(STEP_NAMES[runReached[r]]);
     Serial.print(", launch_dist "); Serial.print(launchDist[r]);
     Serial.print(", line_side "); Serial.print(lineSide[r]);
-    Serial.print(", join_turn "); Serial.println(joinTurn[r]);
+    Serial.print(", t1_turn "); Serial.println(t1Turn[r]);
     // avgerr: average line position. - = line on the robot's LEFT, + = on its RIGHT.
     // In the LEFT horseshoe: - means running wide (outside), + means cutting inside.
     // In the RIGHT T1 arc:   + means running wide (outside), - means cutting inside.
@@ -272,7 +278,7 @@ void startRun() {
   lastError = 0;
   firstReading = true;
   speedNow = LAUNCH_SPEED;
-  centeredReads = 0;
+  minTurn = 0;
   lostTime = 0;
   segTravel2 = 0; segTurn = 0; segMaxErr = 0; segSpeedSum = 0; segReads = 0;
   segErrSum = 0; segLost = 0;
@@ -373,20 +379,21 @@ void loop() {
   // (a wide black patch, like the start bar, is driven straight over)
   if (step == LAUNCH) {
     drive(LAUNCH_SPEED, LAUNCH_SPEED);
-    if (total > 0 && strongBlack < 5) {
+    if (dist >= LAUNCH_IGNORE && total > 0 && strongBlack >= 1 && strongBlack < 5) {
       launchDist[run] = dist;                         // where it met the line...
       long pos = weighted / total;                    // ...and on which side of the sensors
       lineSide[run] = (pos > 4500) ? -1 : (pos < 2500) ? 1 : 0;
-      setStep(JOIN);
+      minTurn = turnTotal;
+      setStep(T1);
     }
     return;
   }
 
   // ----- Move on to the next step when this one is finished -----
-  if (step == TO_T1 && recentTurn() >= CURVE_DETECT) {
-    setStep(T1_ARC);                                  // track started curving right
-  } else if (step == T1_ARC && (stepTurn >= T1_TURN || stepDist >= T1_LENGTH)) {
-    setStep(STRAIGHT);
+  if (turnTotal < minTurn) minTurn = turnTotal;
+  long t1Turned = turnTotal - minTurn;
+  if (step == T1 && ((t1Turned >= T1_DONE && recentTurn() < T1_STEADY) || t1Turned >= T1_MAX)) {
+    setStep(STRAIGHT);                                // T1 done: go
   } else if (step == STRAIGHT && (stepDist >= STRAIGHT_LENGTH ||
                                   (stepDist > 40 && recentTurn() <= -CURVE_DETECT))) {
     setStep(HS_ARC);                                  // planned distance, or the curve started
@@ -398,12 +405,10 @@ void loop() {
   }
 
   // ----- Speed and planned turn rate for this step -----
-  int target = TO_T1_SPEED;
+  int target = T1_SPEED;
   float planCurve = 0;                                // turn counts per count travelled
   bool planned = false;
-  if (step == JOIN)          { target = JOIN_SPEED; }
-  else if (step == T1_ARC)   { target = T1_SPEED;       planCurve = (float)T1_TURN / T1_LENGTH; planned = true; }
-  else if (step == STRAIGHT) { target = STRAIGHT_SPEED; planned = true; }
+  if (step == STRAIGHT)      { target = STRAIGHT_SPEED; planned = true; }
   else if (step == HS_ARC)   { target = HS_SPEED;       planCurve = (float)HS_TURN / HS_LENGTH; planned = true; }
   else if (step == EXIT)     { target = EXIT_SPEED; }
   if (speedNow < target) speedNow += 3;       // speed up quickly but not in one jump
@@ -414,9 +419,8 @@ void loop() {
     if (lostTime == 0) {
       lostTime = nowMs();
       segLost++;
-      if (step == TO_T1 || step == T1_ARC) spinRight = true;     // T1 turns right
-      else if (step == HS_ARC)            spinRight = false;     // horseshoe turns left
-      else                                spinRight = lastError > 0;
+      if (step == HS_ARC) spinRight = false;                     // horseshoe turns left
+      else                spinRight = lastError > 0;
       lastPosition = spinRight ? 0 : 7000;
     }
     if (nowMs() - lostTime > 1500) {          // could not find it: end this run
@@ -425,7 +429,7 @@ void loop() {
     }
     if (spinRight) drive(SEARCH_SPEED, -SEARCH_SPEED);
     else           drive(-SEARCH_SPEED, SEARCH_SPEED);
-    speedNow = JOIN_SPEED;
+    speedNow = T1_SPEED;
     firstReading = true;
     return;
   }
@@ -461,13 +465,6 @@ void loop() {
   left  = constrain(left,  -MAX_REVERSE, 255);
   right = constrain(right, -MAX_REVERSE, 255);
   drive(left, right);
-
-  // JOIN ends once the line has been centered for a moment
-  if (step == JOIN) {
-    if (labs(error) < 800) centeredReads++;
-    else centeredReads = 0;
-    if (centeredReads >= 10) setStep(TO_T1);
-  }
 
   // for the log
   if (labs(error) > segMaxErr) segMaxErr = labs(error);
