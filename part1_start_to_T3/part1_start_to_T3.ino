@@ -44,12 +44,14 @@ const int  LAUNCH_SPEED  = 100;  // 1. straight out of the box
 const long LAUNCH_IGNORE = 40;   //    ignore black for this distance (box outline)
 
 const int  T1_SPEED   = 70;      // 2. following the line round T1
-const long T1_DONE    = 230;     //    T1 is done once it has turned right this much
+const long T1_DONE    = 200;     //    T1 is done once it has turned right this much
                                  //    (counted from its most-left point, so a box that
                                  //    joins the line with a left turn works too)...
-const long T1_STEADY  = 15;      //    ...is no longer turning much (last 60 counts)...
-const long T1_CENTER  = 700;     //    ...and the line is centered (lined up, any box)
+const long T1_STEADY  = 15;      //    ...and has stopped turning right (last 60 counts)
+                                 //    or started turning left (the horseshoe)
 const long T1_MAX     = 420;     //    or, at the latest, once it has turned this much
+const long T1_MAX_DIST = 500;    //    or, at the latest, after this distance in T1
+                                 //    (T1 turns differ by box: 275..370 in tests)
 
 const int  STRAIGHT_SPEED  = 160; // 3. straight: speed
 const long STRAIGHT_LENGTH = 160; //    distance (ends early if the horseshoe starts)
@@ -396,8 +398,8 @@ void loop() {
   // ----- Move on to the next step when this one is finished -----
   if (turnTotal < minTurn) minTurn = turnTotal;
   long t1Turned = turnTotal - minTurn;
-  if (step == T1 && ((t1Turned >= T1_DONE && recentTurn() < T1_STEADY && labs(lastError) < T1_CENTER)
-                     || t1Turned >= T1_MAX)) {
+  if (step == T1 && ((t1Turned >= T1_DONE && recentTurn() < T1_STEADY)
+                     || t1Turned >= T1_MAX || stepDist >= T1_MAX_DIST)) {
     setStep(STRAIGHT);                                // T1 done: go
   } else if (step == STRAIGHT && (stepDist >= STRAIGHT_LENGTH ||
                                   (stepDist > 40 && recentTurn() <= -CURVE_DETECT))) {
