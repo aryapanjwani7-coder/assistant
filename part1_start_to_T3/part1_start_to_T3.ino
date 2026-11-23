@@ -7,7 +7,8 @@
 //   3. STRAIGHT  once T1 is done: fixed distance at full speed, holding straight
 //   4. HORSESHOE one smooth left arc at constant speed
 //   5. EXIT      normal line following, then stop
-// In the planned steps (3, 4) the line sensors only make slight corrections.
+// On the straight it follows the line normally, so it is lined up for the horseshoe.
+// In the horseshoe the line sensors only make slight corrections.
 //
 // FOUR RUNS IN A ROW, one from each start box:
 //   Put it in box 1 and press RESET. It runs Part 1 and stops.
@@ -43,11 +44,12 @@ const int  LAUNCH_SPEED  = 100;  // 1. straight out of the box
 const long LAUNCH_IGNORE = 40;   //    ignore black for this distance (box outline)
 
 const int  T1_SPEED   = 70;      // 2. following the line round T1
-const long T1_DONE    = 250;     //    T1 is done once it has turned right this much
+const long T1_DONE    = 230;     //    T1 is done once it has turned right this much
                                  //    (counted from its most-left point, so a box that
                                  //    joins the line with a left turn works too)...
-const long T1_STEADY  = 15;      //    ...and is no longer turning much (last 60 counts)
-const long T1_MAX     = 340;     //    or, at the latest, once it has turned this much
+const long T1_STEADY  = 15;      //    ...is no longer turning much (last 60 counts)...
+const long T1_CENTER  = 700;     //    ...and the line is centered (lined up, any box)
+const long T1_MAX     = 420;     //    or, at the latest, once it has turned this much
 
 const int  STRAIGHT_SPEED  = 160; // 3. straight: speed
 const long STRAIGHT_LENGTH = 160; //    distance (ends early if the horseshoe starts)
@@ -394,7 +396,8 @@ void loop() {
   // ----- Move on to the next step when this one is finished -----
   if (turnTotal < minTurn) minTurn = turnTotal;
   long t1Turned = turnTotal - minTurn;
-  if (step == T1 && ((t1Turned >= T1_DONE && recentTurn() < T1_STEADY) || t1Turned >= T1_MAX)) {
+  if (step == T1 && ((t1Turned >= T1_DONE && recentTurn() < T1_STEADY && labs(lastError) < T1_CENTER)
+                     || t1Turned >= T1_MAX)) {
     setStep(STRAIGHT);                                // T1 done: go
   } else if (step == STRAIGHT && (stepDist >= STRAIGHT_LENGTH ||
                                   (stepDist > 40 && recentTurn() <= -CURVE_DETECT))) {
@@ -410,7 +413,7 @@ void loop() {
   int target = T1_SPEED;
   float planCurve = 0;                                // turn counts per count travelled
   bool planned = false;
-  if (step == STRAIGHT)      { target = STRAIGHT_SPEED; planned = true; }
+  if (step == STRAIGHT)      { target = STRAIGHT_SPEED; }  // full line following: line up for the horseshoe
   else if (step == HS_ARC)   { target = HS_SPEED;       planCurve = (float)HS_TURN / HS_LENGTH; planned = true; }
   else if (step == EXIT)     { target = EXIT_SPEED; }
   if (speedNow < target) speedNow += 3;       // speed up quickly but not in one jump
